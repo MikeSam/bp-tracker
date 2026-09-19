@@ -21,9 +21,14 @@ func readDisplay(_ image: CGImage) async throws -> Reading {
     let right = anchors.map(\.minX).min()! - 0.3 * h
     let bounds = CGRect(x: 0, y: 0, width: image.width, height: image.height)
 
-    func value(near label: CGRect) -> Int? {
-        // Digits sit left of the label, slightly below its centre, up to ~5 label heights tall.
-        let roi = CGRect(x: right - 11 * h, y: label.midY - 2.8 * h, width: 11 * h, height: 6.3 * h).intersection(bounds)
+    // Digits sit left of the label. Their window (in label heights: top/bottom from the label's centre, left from
+    // the digits' right edge) differs per row: the device prints SYS beside the middle of its digits, DIA and PUL
+    // nearer the top, the rows are only ~0.4 h apart, and the smaller PUL digits stop short of the date text.
+    let window: [String: (top: CGFloat, bottom: CGFloat, left: CGFloat)] = ["SYS": (-3.0, 3.8, 11), "DIA": (-2.4, 4.2, 11), "PUL": (-1.8, 3.0, 9)]
+    func value(_ key: String) -> Int? {
+        guard let label = labels[key] else { return nil }
+        let (top, bottom, left) = window[key]!
+        let roi = CGRect(x: right - left * h, y: label.midY + top * h, width: left * h, height: (bottom - top) * h).intersection(bounds)
         let bitmap = Bitmap(image, roi: roi, maxSide: 800)
         let radius = Int(0.25 * h * bitmap.scale)   // closes the gaps between segments of one digit
         let blobs = bitmap.blobs(dilatedBy: radius)
@@ -32,7 +37,7 @@ func readDisplay(_ image: CGImage) async throws -> Reading {
         guard !digits.isEmpty, digits.allSatisfy({ $0 != nil }), let n = Int(digits.map { String($0!) }.joined()) else { return nil }
         return (30...300).contains(n) ? n : nil
     }
-    return Reading(sys: value(near: sys), dia: value(near: dia), pulse: labels["PUL"].flatMap(value))
+    return Reading(sys: value("SYS"), dia: value("DIA"), pulse: value("PUL"))
 }
 
 /// Label boxes in pixel coordinates, top-left origin.
@@ -71,6 +76,21 @@ private struct Bitmap {
         scale = s; width = w; height = h
         let t = Bitmap.otsu(gray)
         bits = gray.map { $0 < t ? 1 : 0 }
+        clearEdgeTouching()
+    }
+
+    /// Anything cut off by the crop boundary (a neighbouring digit row, the LCD edge, a label) is not a digit:
+    /// erase it before dilation so it can't weld onto the digits.
+    private mutating func clearEdgeTouching() {
+        var stack: [Int] = []
+        for x in 0..<width { stack += [x, (height - 1) * width + x] }          // top and bottom rows
+        for y in 0..<height { stack += [y * width, y * width + width - 1] }    // left and right columns
+        while let i = stack.popLast() {
+            guard bits[i] == 1 else { continue }
+            bits[i] = 0
+            let x = i % width
+            for n in [i - 1, i + 1, i - width, i + width] where n >= 0 && n < bits.count && bits[n] == 1 && abs(n % width - x) <= 1 { stack.append(n) }
+        }
     }
 
     private static func otsu(_ pixels: [UInt8]) -> UInt8 {

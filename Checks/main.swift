@@ -6,6 +6,7 @@ setvbuf(stdout, nil, _IONBF, 0)
 let fixtures: [(path: String, sys: Int, dia: Int, pulse: Int)] = [
     ("Checks/med55.png", 117, 77, 56),
     ("Checks/med55-2.png", 115, 74, 72),
+    ("Checks/med55-3.jpg", 122, 76, 66),
 ]
 
 func read(_ path: String) async throws -> Reading {
