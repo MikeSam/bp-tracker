@@ -23,3 +23,7 @@ Package.resolved
 
 # macOS
 .DS_Store
+
+# Agent skills
+.agents/
+.claude/
