@@ -174,7 +174,7 @@
 				CURRENT_PROJECT_VERSION = 1;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_NSCameraUsageDescription = "Photograph the blood pressure monitor display to read the numbers.";
-				INFOPLIST_KEY_NSHealthShareUsageDescription = "Required by HealthKit; nothing is read.";
+				INFOPLIST_KEY_NSHealthShareUsageDescription = "Show your recent blood pressure readings and trend on the main screen.";
 				INFOPLIST_KEY_NSHealthUpdateUsageDescription = "Save blood pressure and pulse readings to Health.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
@@ -201,7 +201,7 @@
 				CURRENT_PROJECT_VERSION = 1;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_NSCameraUsageDescription = "Photograph the blood pressure monitor display to read the numbers.";
-				INFOPLIST_KEY_NSHealthShareUsageDescription = "Required by HealthKit; nothing is read.";
+				INFOPLIST_KEY_NSHealthShareUsageDescription = "Show your recent blood pressure readings and trend on the main screen.";
 				INFOPLIST_KEY_NSHealthUpdateUsageDescription = "Save blood pressure and pulse readings to Health.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;

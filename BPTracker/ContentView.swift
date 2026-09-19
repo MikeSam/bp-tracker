@@ -2,6 +2,8 @@ import SwiftUI
 import PhotosUI
 
 struct ContentView: View {
+    @Environment(\.scenePhase) private var scenePhase
+    @State private var readings: [BPSample] = []
     @State private var showCamera = false
     @State private var showSettings = false
     @State private var pickedItem: PhotosPickerItem?
@@ -10,7 +12,9 @@ struct ContentView: View {
 
     var body: some View {
         NavigationStack {
-            VStack(spacing: 32) {
+            VStack(spacing: 24) {
+                TrendView(readings: readings)
+                Spacer()
                 Text(status)
                     .multilineTextAlignment(.center)
                     .foregroundStyle(.secondary)
@@ -33,6 +37,7 @@ struct ContentView: View {
                 Button("Reminders", systemImage: "bell") { showSettings = true }
             }
         }
+        .task(id: scenePhase) { if scenePhase == .active { await load() } }   // first show + back from Health
         .sheet(isPresented: $showSettings) { SettingsView() }
         .onChange(of: pickedItem) {
             Task {
@@ -47,8 +52,15 @@ struct ContentView: View {
                 .ignoresSafeArea()
         }
         .sheet(item: $draft) { reading in
-            ConfirmView(reading: reading) { status = $0 }
+            ConfirmView(reading: reading) {
+                status = "Saved to Health."
+                Task { await load() }
+            }
         }
+    }
+
+    private func load() async {
+        readings = (try? await Health.recent()) ?? readings
     }
 
     private func read(_ image: UIImage) async {
@@ -61,10 +73,15 @@ struct ContentView: View {
 }
 
 struct ConfirmView: View {
-    @State var reading: Reading
-    var onDone: (String) -> Void
+    @State private var reading: Reading
+    let onDone: () -> Void
     @Environment(\.dismiss) private var dismiss
     @State private var error: String?
+
+    init(reading: Reading, onDone: @escaping () -> Void) {
+        _reading = State(initialValue: reading)
+        self.onDone = onDone
+    }
 
     var body: some View {
         NavigationStack {
@@ -97,7 +114,7 @@ struct ConfirmView: View {
         guard let sys = reading.sys, let dia = reading.dia else { return }
         do {
             try await Health.save(sys: sys, dia: dia, pulse: reading.pulse, at: reading.date)
-            onDone("Saved \(sys)/\(dia)" + (reading.pulse.map { " · \($0) bpm" } ?? "") + " at \(reading.date.formatted(date: .abbreviated, time: .shortened))")
+            onDone()
             dismiss()
         } catch {
             self.error = error.localizedDescription
@@ -106,5 +123,5 @@ struct ConfirmView: View {
 }
 
 #Preview {
-    ConfirmView(reading: Reading(sys: 120, dia: 80, pulse: 65)) { _ in }
+    ConfirmView(reading: Reading(sys: 120, dia: 80, pulse: 65)) {}
 }
