@@ -84,7 +84,8 @@ struct ContentView: View {
 
     private func read(_ image: UIImage) async {
         guard let cg = image.uprightCGImage else { return }
-        var reading = (try? await readDisplay(cg)) ?? Reading()
+        status = "Reading the display…"
+        var reading = await Task.detached { try? await readDisplay(cg) }.value ?? Reading()   // off the main thread
         reading.date = .now
         if reading.sys == nil || reading.dia == nil { status = "Couldn't read the display — check or type the values." }
         draft = reading

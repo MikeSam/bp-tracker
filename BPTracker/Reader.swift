@@ -112,10 +112,19 @@ private struct Bitmap {
 
     /// Bounding boxes of connected dark regions after a square dilation of `radius`.
     func blobs(dilatedBy radius: Int) -> [CGRect] {
-        var d = bits
-        for y in 0..<height { for x in 0..<width where bits[y * width + x] == 1 {
-            for dy in max(0, y - radius)...min(height - 1, y + radius) { for dx in max(0, x - radius)...min(width - 1, x + radius) { d[dy * width + dx] = 1 } }
-        } }
+        // Separable box dilation via prefix sums: O(pixels) regardless of radius.
+        func dilate(_ src: [UInt8], stride: Int, length: Int, lines: Int, lineStride: Int) -> [UInt8] {
+            var out = src
+            var prefix = [Int](repeating: 0, count: length + 1)
+            for line in 0..<lines {
+                let base = line * lineStride
+                for i in 0..<length { prefix[i + 1] = prefix[i] + Int(src[base + i * stride]) }
+                for i in 0..<length where prefix[min(length, i + radius + 1)] - prefix[max(0, i - radius)] > 0 { out[base + i * stride] = 1 }
+            }
+            return out
+        }
+        var d = dilate(bits, stride: 1, length: width, lines: height, lineStride: width)   // rows
+        d = dilate(d, stride: width, length: height, lines: width, lineStride: 1)          // columns
         var rects: [CGRect] = []
         var stack: [Int] = []
         for start in 0..<d.count where d[start] == 1 {
