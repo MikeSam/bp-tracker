@@ -2,18 +2,37 @@ import SwiftUI
 import PhotosUI
 
 struct ContentView: View {
-    @Environment(\.scenePhase) private var scenePhase
     @State private var readings: [BPSample] = []
+    @State private var range = DateRange.month
+    @State private var customStart = Calendar.current.date(byAdding: .day, value: -30, to: .now)!
+    @State private var customEnd = Date.now
+    @State private var report: Report?
     @State private var showCamera = false
     @State private var showSettings = false
     @State private var pickedItem: PhotosPickerItem?
     @State private var draft: Reading?
     @State private var status = "Photograph the monitor display."
 
+    private var window: Window { range.window(custom: min(customStart, customEnd)...customEnd) }
+
     var body: some View {
         NavigationStack {
             VStack(spacing: 24) {
-                TrendView(readings: readings)
+                VStack {
+                    Picker("Range", selection: $range) {
+                        ForEach(DateRange.allCases) { Text($0.rawValue) }
+                    }
+                    .pickerStyle(.segmented)
+                    if range == .custom {
+                        HStack {
+                            DatePicker("From", selection: $customStart, in: ...customEnd, displayedComponents: .date)
+                            DatePicker("To", selection: $customEnd, in: customStart...Date.now, displayedComponents: .date)
+                        }
+                        .labelsHidden()
+                        .font(.subheadline)
+                    }
+                }
+                TrendView(readings: readings, window: window)
                 Spacer()
                 Text(status)
                     .multilineTextAlignment(.center)
@@ -34,11 +53,18 @@ struct ContentView: View {
             .padding()
             .navigationTitle("BP Tracker")
             .toolbar {
+                Button("Export PDF", systemImage: "square.and.arrow.up") {
+                    report = Report(readings: window.filter(readings), window: window)
+                }
+                .disabled(window.filter(readings).isEmpty)
                 Button("Reminders", systemImage: "bell") { showSettings = true }
             }
         }
-        .task(id: scenePhase) { if scenePhase == .active { await load() } }   // first show + back from Health
+        .task {   // live: covers our saves, the Health app, and other apps
+            do { for try await all in Health.readings() { readings = all } } catch { status = error.localizedDescription }
+        }
         .sheet(isPresented: $showSettings) { SettingsView() }
+        .sheet(item: $report) { ReportPreview(report: $0) }
         .onChange(of: pickedItem) {
             Task {
                 if let data = try? await pickedItem?.loadTransferable(type: Data.self), let image = UIImage(data: data) {
@@ -52,15 +78,8 @@ struct ContentView: View {
                 .ignoresSafeArea()
         }
         .sheet(item: $draft) { reading in
-            ConfirmView(reading: reading) {
-                status = "Saved to Health."
-                Task { await load() }
-            }
+            ConfirmView(reading: reading) { status = "Saved to Health." }
         }
-    }
-
-    private func load() async {
-        readings = (try? await Health.recent()) ?? readings
     }
 
     private func read(_ image: UIImage) async {
