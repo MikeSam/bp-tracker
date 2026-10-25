@@ -306,7 +306,7 @@
         "ru" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Добавить в «Здоровье»?"
+            "value" : "В «Здоровье»?"
           }
         },
         "es" : {
@@ -318,7 +318,7 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Zu Health hinzufügen?"
+            "value" : "In Health sichern?"
           }
         },
         "zh-Hans" : {

@@ -177,6 +177,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = "BP Tracker";
 				INFOPLIST_KEY_NSCameraUsageDescription = "Photograph the blood pressure monitor display to read the numbers.";
 				INFOPLIST_KEY_NSHealthShareUsageDescription = "Show your recent blood pressure readings and trend on the main screen.";
 				INFOPLIST_KEY_NSHealthUpdateUsageDescription = "Save blood pressure and pulse readings to Health.";
@@ -204,6 +205,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = "BP Tracker";
 				INFOPLIST_KEY_NSCameraUsageDescription = "Photograph the blood pressure monitor display to read the numbers.";
 				INFOPLIST_KEY_NSHealthShareUsageDescription = "Show your recent blood pressure readings and trend on the main screen.";
 				INFOPLIST_KEY_NSHealthUpdateUsageDescription = "Save blood pressure and pulse readings to Health.";
