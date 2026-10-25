@@ -61,6 +61,9 @@ struct ContentView: View {
             }
         }
         .task {   // live: covers our saves, the Health app, and other apps
+            #if DEBUG
+            if let arg = UserDefaults.standard.string(forKey: "demo") { return await demo(arg) }
+            #endif
             do { for try await all in Health.readings() { readings = all } } catch { status = error.localizedDescription }
         }
         .sheet(isPresented: $showSettings) { SettingsView() }
@@ -90,6 +93,17 @@ struct ContentView: View {
         if reading.sys == nil || reading.dia == nil { status = String(localized: "Couldn't read the display — check or type the values.") }
         draft = reading
     }
+
+    #if DEBUG
+    /// Screenshot mode: mock readings instead of Health, then `-demo 1Y`, `report`, `reminders` or a photo path.
+    private func demo(_ arg: String) async {
+        readings = .mock
+        if let preset = DateRange(rawValue: arg) { range = preset }
+        else if arg == "report" { report = Report(readings: window.filter(readings), window: window) }
+        else if arg == "reminders" { showSettings = true }
+        else if let image = UIImage(contentsOfFile: arg) { await read(image) }
+    }
+    #endif
 }
 
 struct ConfirmView: View {

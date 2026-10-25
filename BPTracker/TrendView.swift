@@ -175,11 +175,13 @@ struct BPChart: View {
 }
 
 extension [BPSample] {
-    /// Two weeks of plausible readings for previews.
+    /// A year of plausible morning and evening readings, easing down over time, for previews and screenshots.
     static var mock: [BPSample] {
-        (0..<14).map { i in
-            BPSample(id: UUID(), date: Date(timeIntervalSinceNow: -Double(13 - i) * 86_400 + Double(i % 3) * 3_600),
-                     sys: 112 + (i * 7) % 18, dia: 72 + (i * 5) % 11, pulse: i % 4 == 0 ? nil : 58 + (i * 3) % 14)
+        (0..<730).reversed().map { i in
+            let day = i / 2, evening = i % 2 == 0, trend = day / 40
+            return BPSample(id: UUID(), date: Date(timeIntervalSinceNow: -Double(day) * 86_400 - (evening ? 3_600 : 13 * 3_600)),
+                            sys: 114 + trend + (day * 7) % 13 + (evening ? 4 : 0), dia: 73 + trend / 2 + (day * 5) % 9,
+                            pulse: 60 + (i * 3) % 13)
         }
     }
 }
