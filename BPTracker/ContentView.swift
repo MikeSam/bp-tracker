@@ -11,7 +11,7 @@ struct ContentView: View {
     @State private var showSettings = false
     @State private var pickedItem: PhotosPickerItem?
     @State private var draft: Reading?
-    @State private var status = "Photograph the monitor display."
+    @State private var status = String(localized: "Photograph the monitor display.")
 
     private var window: Window { range.window(custom: min(customStart, customEnd)...customEnd) }
 
@@ -20,7 +20,7 @@ struct ContentView: View {
             VStack(spacing: 24) {
                 VStack {
                     Picker("Range", selection: $range) {
-                        ForEach(DateRange.allCases) { Text($0.rawValue) }
+                        ForEach(DateRange.allCases) { Text(LocalizedStringKey($0.rawValue)) }
                     }
                     .pickerStyle(.segmented)
                     if range == .custom {
@@ -78,16 +78,16 @@ struct ContentView: View {
                 .ignoresSafeArea()
         }
         .sheet(item: $draft) { reading in
-            ConfirmView(reading: reading) { status = "Saved to Health." }
+            ConfirmView(reading: reading) { status = String(localized: "Saved to Health.") }
         }
     }
 
     private func read(_ image: UIImage) async {
         guard let cg = image.uprightCGImage else { return }
-        status = "Reading the display…"
+        status = String(localized: "Reading the display…")
         var reading = await Task.detached { try? await readDisplay(cg) }.value ?? Reading()   // off the main thread
         reading.date = .now
-        if reading.sys == nil || reading.dia == nil { status = "Couldn't read the display — check or type the values." }
+        if reading.sys == nil || reading.dia == nil { status = String(localized: "Couldn't read the display — check or type the values.") }
         draft = reading
     }
 }

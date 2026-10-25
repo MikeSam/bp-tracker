@@ -75,12 +75,12 @@ struct Bar: Identifiable {
     var mid: Date { interval.start.addingTimeInterval(interval.duration / 2) }
     var values: String {
         let bp = count == 1 ? "\(sys.upperBound)/\(dia.lowerBound)" : "\(sys.lowerBound)–\(sys.upperBound) / \(dia.lowerBound)–\(dia.upperBound)"
-        return pulse.map { "\(bp) · \($0) bpm" } ?? bp
+        return pulse.map { String(localized: "\(bp) · \($0) bpm") } ?? bp
     }
     var when: String {
         switch count {
         case 1: id.formatted(date: .abbreviated, time: .shortened)
-        default: "\(count) readings · " + (interval.duration <= 86_400 ? id.formatted(date: .abbreviated, time: .omitted)
+        default: String(localized: "\(count) readings") + " · " + (interval.duration <= 86_400 ? id.formatted(date: .abbreviated, time: .omitted)
                                                                          : (interval.start..<interval.end).formatted(date: .abbreviated, time: .omitted))
         }
     }
@@ -93,19 +93,21 @@ struct TrendView: View {
 
     var body: some View {
         if let latest = readings.last {
+            let when = latest.date.formatted(date: .abbreviated, time: .shortened)
             VStack(alignment: .leading, spacing: 4) {
                 Text("\(latest.sys)/\(latest.dia)")
                     .font(.system(.largeTitle, design: .rounded, weight: .semibold))
                     .monospacedDigit()
                 + Text(" mmHg").font(.title3).foregroundStyle(.secondary)
-                + Text(latest.pulse.map { "  \($0) bpm" } ?? "").font(.title3).foregroundStyle(.pink)
-                Text(latest.date.formatted(date: .abbreviated, time: .shortened))
+                + Text(latest.pulse.map { "  " + String(localized: "\($0) bpm") } ?? "").font(.title3).foregroundStyle(.pink)
+                Text(when)
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .accessibilityElement(children: .combine)
-            .accessibilityLabel("Latest reading \(latest.sys) over \(latest.dia)" + (latest.pulse.map { ", pulse \($0)" } ?? "") + ", \(latest.date.formatted(date: .abbreviated, time: .shortened))")
+            .accessibilityLabel(latest.pulse.map { String(localized: "Latest reading \(latest.sys) over \(latest.dia), pulse \($0), \(when)") }
+                                ?? String(localized: "Latest reading \(latest.sys) over \(latest.dia), \(when)"))
 
             BPChart(readings: readings, window: window)
                 .frame(height: 240)
@@ -122,6 +124,7 @@ struct BPChart: View {
     let readings: [BPSample]
     let window: Window
     @State private var selectedDate: Date?
+    private let bpLabel = String(localized: "Blood pressure"), pulseLabel = String(localized: "Pulse")
 
     private func selected(in bars: [Bar]) -> Bar? {
         guard let selectedDate else { return nil }
@@ -136,11 +139,11 @@ struct BPChart: View {
                     yStart: .value("Diastolic", bar.dia.lowerBound), yEnd: .value("Systolic", bar.sys.upperBound),
                     width: window.bucket == nil ? .fixed(6) : .ratio(0.6))
                 .cornerRadius(3)
-                .foregroundStyle(by: .value("Measure", "Blood pressure"))
+                .foregroundStyle(by: .value("Measure", bpLabel))
                 .opacity(selected == nil || selected?.id == bar.id ? 1 : 0.35)
             if let pulse = bar.pulse {
                 LineMark(x: .value("Date", bar.mid), y: .value("Pulse", pulse))
-                    .foregroundStyle(by: .value("Measure", "Pulse"))
+                    .foregroundStyle(by: .value("Measure", pulseLabel))
                     .lineStyle(StrokeStyle(lineWidth: 1, dash: [3]))
                     .symbol(.circle)
                     .symbolSize(20)
@@ -159,7 +162,7 @@ struct BPChart: View {
                     }
             }
         }
-        .chartForegroundStyleScale(["Blood pressure": Color.accentColor, "Pulse": Color.pink])
+        .chartForegroundStyleScale([bpLabel: Color.accentColor, pulseLabel: Color.pink])
         .chartXScale(domain: window.domain)
         .chartYScale(domain: .automatic(includesZero: false))
         .chartXSelection(value: $selectedDate)

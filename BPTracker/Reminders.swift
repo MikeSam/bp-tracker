@@ -13,8 +13,8 @@ enum Reminders {
         guard (try? await center.requestAuthorization(options: [.alert, .sound])) == true else { return }
 
         let content = UNMutableNotificationContent()
-        content.title = "Blood pressure check"
-        content.body = "Measure and scan your monitor."
+        content.title = NSString.localizedUserNotificationString(forKey: "Blood pressure check", arguments: nil)   // resolved at delivery, in the current language
+        content.body = NSString.localizedUserNotificationString(forKey: "Measure and scan your monitor.", arguments: nil)
         content.sound = .default
 
         for weekday in 1...7 {
@@ -68,7 +68,7 @@ struct SettingsView: View {
     }
 
     @ViewBuilder
-    private func reminder(_ title: String, _ on: Binding<Bool>, _ time: Binding<Double>) -> some View {
+    private func reminder(_ title: LocalizedStringKey, _ on: Binding<Bool>, _ time: Binding<Double>) -> some View {
         Toggle(title, isOn: on)
         if on.wrappedValue { timePicker(time) }
     }

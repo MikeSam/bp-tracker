@@ -9,7 +9,7 @@ struct Report: Identifiable {
 
     @MainActor
     func pdf() throws -> URL {
-        let url = FileManager.default.temporaryDirectory.appending(path: "Blood Pressure.pdf")
+        let url = FileManager.default.temporaryDirectory.appending(path: String(localized: "Blood Pressure") + ".pdf")
         let usLetter = Locale.current.measurementSystem == .us
         var page = CGRect(origin: .zero, size: usLetter ? CGSize(width: 612, height: 792) : CGSize(width: 595, height: 842))
         guard let pdf = CGContext(url as CFURL, mediaBox: &page, nil) else { throw CocoaError(.fileWriteUnknown) }
@@ -89,10 +89,10 @@ private struct Summary: View {
         }
     }
 
-    private func stat(_ title: String, _ value: String, unit: String? = nil) -> some View {
+    private func stat(_ title: LocalizedStringKey, _ value: String, unit: LocalizedStringKey? = nil) -> some View {
         VStack(alignment: .leading, spacing: 2) {
             Text(title).font(.caption).foregroundStyle(.secondary)
-            (Text(value).font(.headline.monospacedDigit()) + Text(unit.map { " \($0)" } ?? "").font(.caption).foregroundStyle(.secondary))
+            (Text(value).font(.headline.monospacedDigit()) + Text(" ") + Text(unit ?? "").font(.caption).foregroundStyle(.secondary))
         }
     }
 }
