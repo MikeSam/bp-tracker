@@ -40,6 +40,8 @@ These come from the 2026 best-seller and review lists ([AARP](https://www.aarp.o
 - **Beurer BM57**, **iHealth Track**: labelled LCD. Untested.
 - **Withings BPM Connect / Core**: values on an LED matrix with no labels. Not supported. These sync to Health on their own.
 
+Monitor names are used only to describe compatibility. B.Well, Omron, Microlife, Sanitas and the other brands named here are trademarks of their respective owners. This project isn't affiliated with or endorsed by them.
+
 To add a monitor, put a sharp, glare-free photo in `Checks/`, add its expected values to `fixtures` in `Checks/main.swift`, and run the check.
 
 ## Checks
