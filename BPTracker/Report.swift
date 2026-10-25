@@ -94,6 +94,8 @@ private struct Summary: View {
             Text(title).font(.caption).foregroundStyle(.secondary)
             (Text(value).font(.headline.monospacedDigit()) + Text(" ") + Text(unit ?? "").font(.caption).foregroundStyle(.secondary))
         }
+        .lineLimit(1)
+        .minimumScaleFactor(0.5)   // shrink, don't truncate, ranges like 114–131 and long translated labels
     }
 }
 
