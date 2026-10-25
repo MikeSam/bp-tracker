@@ -4,10 +4,18 @@ import ImageIO
 import SwiftUI
 setvbuf(stdout, nil, _IONBF, 0)
 
-let fixtures: [(path: String, sys: Int, dia: Int, pulse: Int)] = [
+// pulse nil: the photo's pulse isn't read yet (digits in shadow / welded to the LCD edge); it must never be read wrong.
+let fixtures: [(path: String, sys: Int, dia: Int, pulse: Int?)] = [
     ("Checks/med55.png", 117, 77, 56),
     ("Checks/med55-2.png", 115, 74, 72),
     ("Checks/med55-3.jpg", 122, 76, 66),
+    ("Checks/omron-hem7120.jpg", 119, 68, nil),
+    ("Checks/omron-hem7120-2.jpg", 161, 89, 64),
+    ("Checks/omron-hem7120-3.jpg", 109, 82, nil),
+    ("Checks/omron-m3.jpg", 131, 78, 67),
+    ("Checks/omron-r6.jpg", 114, 75, 72),
+    ("Checks/sanitas-wrist.jpg", 120, 74, 80),
+    ("Checks/microlife.jpg", 138, 73, nil),
 ]
 
 func read(_ path: String) async throws -> Reading {

@@ -10,34 +10,73 @@ struct Reading: Identifiable {
     var date: Date = .now
 }
 
-/// Reads SYS / DIA / PUL from a photo of the B.Well MED-55.
+/// Reads SYS / DIA / PUL from a photo of a home blood pressure monitor's LCD.
 /// Vision's text recognizer can't read the 7-segment digits, so it is only used to locate the
-/// printed labels; the digits left of each label are decoded by sampling their segments.
+/// printed SYS / DIA / PUL(SE) labels; the digits beside each label are decoded by sampling their segments.
 func readDisplay(_ image: CGImage) async throws -> Reading {
-    let labels = try await findLabels(in: image)
-    guard let sys = labels["SYS"], let dia = labels["DIA"] else { return Reading() }
-    let anchors = [sys, dia, labels["PUL"]].compactMap { $0 }
-    let h = anchors.map(\.height).reduce(0, +) / CGFloat(anchors.count)
-    let right = anchors.map(\.minX).min()! - 0.3 * h
-    let bounds = CGRect(x: 0, y: 0, width: image.width, height: image.height)
-
-    // Digits sit left of the label. Their window (in label heights: top/bottom from the label's centre, left from
-    // the digits' right edge) differs per row: the device prints SYS beside the middle of its digits, DIA and PUL
-    // nearer the top, the rows are only ~0.4 h apart, and the smaller PUL digits stop short of the date text.
-    let window: [String: (top: CGFloat, bottom: CGFloat, left: CGFloat)] = ["SYS": (-3.0, 3.8, 11), "DIA": (-2.4, 4.2, 11), "PUL": (-1.8, 3.0, 9)]
-    func value(_ key: String) -> Int? {
-        guard let label = labels[key] else { return nil }
-        let (top, bottom, left) = window[key]!
-        let roi = CGRect(x: right - left * h, y: label.midY + top * h, width: left * h, height: (bottom - top) * h).intersection(bounds)
-        let bitmap = Bitmap(image, roi: roi, maxSide: 800)
-        let radius = Int(0.25 * h * bitmap.scale)   // closes the gaps between segments of one digit
-        let blobs = bitmap.blobs(dilatedBy: radius)
-            .filter { $0.height >= 2 * h * bitmap.scale && $0.minX > 0 && $0.maxX < CGFloat(bitmap.width) } // whole digits only
-        let digits = blobs.sorted { $0.minX < $1.minX }.map { bitmap.digit(in: $0.insetBy(dx: CGFloat(radius), dy: CGFloat(radius))) }
-        guard !digits.isEmpty, digits.allSatisfy({ $0 != nil }), let n = Int(digits.map { String($0!) }.joined()) else { return nil }
-        return (30...300).contains(n) ? n : nil
+    var labels = try await findLabels(in: image)
+    if labels["DIA"] == nil, let s = labels["SYS"], let p = labels["PUL"] {    // Vision sometimes misses one: DIA sits halfway
+        labels["DIA"] = s.offsetBy(dx: 0, dy: (p.midY - s.midY) / 2)
     }
-    return Reading(sys: value("SYS"), dia: value("DIA"), pulse: value("PUL"))
+    guard let sys = labels["SYS"], let dia = labels["DIA"], dia.midY > sys.midY else { return Reading() }
+    let rows = [("SYS", sys), ("DIA", dia), ("PUL", labels["PUL"])].compactMap { k, r in r.map { (k, $0) } }
+    let pitch = dia.midY - sys.midY            // row spacing: every other size on the display scales with it
+    let bounds = CGRect(x: 0, y: 0, width: image.width, height: image.height)
+    let top = sys.midY - 1.1 * pitch, bottom = rows.last!.1.midY + 1.1 * pitch
+
+    // Digits sit left of the labels on B.Well, Microlife, Sanitas and right of them on Omron: read both sides, keep the plausible one.
+    func read(leftOfLabels: Bool, stripFrame: Bool) -> Reading {
+        let edge = leftOfLabels ? rows.map(\.1.maxX).max()! : rows.map(\.1.minX).min()!   // labels are staggered; each row is trimmed to its own below
+        let width = 3.2 * pitch
+        let roi = CGRect(x: leftOfLabels ? edge - width : edge, y: top, width: width, height: bottom - top).intersection(bounds)
+        guard !roi.isEmpty else { return Reading() }
+        let bitmap = Bitmap(image, roi: roi, scale: min(3, 150 / pitch), window: Int(0.3 * pitch), maxDigit: Int(1.3 * pitch), stripFrame: stripFrame, erasing: rows.map(\.1))   // ~150 px per row: enough detail, JPEG speckle averaged away
+        let s = bitmap.scale, rx = max(1, Int(0.01 * pitch * s)), ry = Int(0.035 * pitch * s)   // vertical: joins a digit's segments, not neighbours
+        // Rows of digits nearly touch on some displays, so each row is read on its own band of the crop: cut between
+        // neighbouring rows, and above the first / below the last (date, captions), at the emptiest scanline nearest
+        // the midpoint of the labels / the label. Ink is summed over a few scanlines, so a cut can't land in the
+        // hairline gap splitting a 7 or an 11 in half.
+        let ys = rows.map { ($0.1.midY - roi.minY) * s }, unit = pitch * s
+        let k = Int(0.04 * unit), raw = (0..<bitmap.height).map(bitmap.dark(row:))
+        let ink = raw.indices.map { raw[max(0, $0 - k)...min(raw.count - 1, $0 + k)].reduce(0, +) }
+        func cut(_ range: ClosedRange<CGFloat>, near y: CGFloat) -> Int {
+            let lo = max(0, Int(range.lowerBound)), hi = min(ink.count - 1, Int(range.upperBound))
+            return lo < hi ? (lo...hi).min { (ink[$0], abs(CGFloat($0) - y)) < (ink[$1], abs(CGFloat($1) - y)) }! : lo
+        }
+        var cuts = [cut(ys[0] - 1.1 * unit ... ys[0] - 0.35 * unit, near: ys[0])]
+        for (a, b) in zip(ys, ys.dropFirst()) { cuts.append(max(cuts.last!, cut((a + b) / 2 - 0.3 * (b - a) ... (a + b) / 2 + 0.3 * (b - a), near: (a + b) / 2))) }
+        cuts.append(cut(ys.last! + 0.2 * unit ... ys.last! + 1.1 * unit, near: ys.last!) + 1)
+        var values: [String: Int] = [:]
+        for (i, (key, label)) in rows.enumerated() where cuts[i] < cuts[i + 1] {
+            // Trim to this row's own label, so the frame beside it is cut and erased.
+            let x = Int(((leftOfLabels ? label.minX : label.maxX) - roi.minX) * s)
+            let band = bitmap.band(cuts[i]..<cuts[i + 1], leftOfLabels ? 0..<max(1, x) : min(x, bitmap.width - 1)..<bitmap.width)
+            let blobs = band.blobs(dilatedBy: rx, ry).filter { $0.height > 0.3 * pitch * s && $0.width > 0.11 * pitch * s && $0.width < 1.1 * $0.height }
+            // Every value has at least two digits of one height; a lone taller blob is an icon.
+            let paired = blobs.filter { b in blobs.contains { $0 != b && abs($0.height - b.height) < 0.15 * b.height } }
+            guard let tallest = paired.map(\.height).max() else { continue }
+            let row = blobs.filter { $0.height > 0.7 * tallest && $0.height < 1.15 * tallest }.sorted { leftOfLabels ? $0.maxX > $1.maxX : $0.minX < $1.minX }
+            // The number is the run of digits nearest the label; a wide gap ends it (icons, bar graphs beyond).
+            // A 1 sits at the right of its digit cell, so measure gaps between whole cells.
+            let cell = max(row.map(\.width).max() ?? 0, 0.5 * tallest)
+            var run = Array(row.prefix(1))
+            for b in row.dropFirst() where (leftOfLabels ? run.last!.maxX - cell - b.maxX : b.maxX - cell - run.last!.maxX) < 0.5 * tallest { run.append(b) }
+            let digits = run.sorted { $0.minX < $1.minX }.map { band.digit(in: $0.insetBy(dx: CGFloat(rx), dy: CGFloat(ry))) }
+            guard (1...3).contains(digits.count), digits.allSatisfy({ $0 != nil }), let n = Int(digits.map { String($0!) }.joined()) else { continue }
+            values[key] = n
+        }
+        return Reading(sys: values["SYS"], dia: values["DIA"], pulse: values["PUL"])
+    }
+    func plausible(_ r: Reading) -> Int {
+        guard let s = r.sys, let d = r.dia, (60...260).contains(s), (30...160).contains(d), s > d else { return 0 }
+        return (r.pulse.map { (30...200).contains($0) } ?? false) ? 2 : 1
+    }
+    // Digits touching the LCD frame get erased with it unless the frame is stripped first, but stripping leaves
+    // frame corners that can pass for digits elsewhere: try both, keep the first most plausible reading.
+    let readings = [(true, false), (false, false), (true, true), (false, true)].lazy.map { read(leftOfLabels: $0, stripFrame: $1) }
+    var best = Reading()
+    for r in readings where plausible(r) > plausible(best) { best = r; if plausible(r) == 2 { break } }
+    return best
 }
 
 /// Label boxes in pixel coordinates, top-left origin.
@@ -48,9 +87,11 @@ private func findLabels(in image: CGImage) async throws -> [String: CGRect] {
     let w = CGFloat(image.width), h = CGFloat(image.height)
     var found: [String: CGRect] = [:]
     for observation in try await request.perform(on: image) {
-        guard let text = observation.topCandidates(1).first?.string.uppercased() else { continue }
-        for key in ["SYS", "DIA", "PUL"] where text.contains(key) && found[key] == nil {
-            let b = observation.boundingBox.cgRect
+        guard let candidate = observation.topCandidates(1).first else { continue }
+        for key in ["SYS", "DIA", "PUL"] where found[key] == nil {
+            // Box just the label: Vision often merges it with neighbours ("SYS —", "PULSE/min").
+            guard let range = candidate.string.range(of: key, options: .caseInsensitive),
+                  let b = candidate.boundingBox(for: range)?.boundingBox.cgRect else { continue }
             found[key] = CGRect(x: b.minX * w, y: (1 - b.maxY) * h, width: b.width * w, height: b.height * h)
         }
     }
@@ -58,13 +99,14 @@ private func findLabels(in image: CGImage) async throws -> [String: CGRect] {
 }
 
 /// Thresholded crop of the image: 1 = dark (lit segment), 0 = background.
+/// The threshold is local (mean of a `window`-sized neighbourhood) so a crop spanning plastic, LCD and glare still separates segments.
 private struct Bitmap {
-    let width: Int, height: Int
+    private(set) var width: Int, height: Int
     let scale: CGFloat
+    private let maxDigit: Int
     private(set) var bits: [UInt8]
 
-    init(_ image: CGImage, roi: CGRect, maxSide: Int) {
-        let s = min(1, CGFloat(maxSide) / max(roi.width, roi.height))
+    init(_ image: CGImage, roi: CGRect, scale s: CGFloat, window: Int, maxDigit: Int, stripFrame: Bool, erasing: [CGRect]) {
         let w = Int(roi.width * s), h = Int(roi.height * s)
         var gray = [UInt8](repeating: 0, count: w * h)
         gray.withUnsafeMutableBytes { buf in
@@ -73,47 +115,85 @@ private struct Bitmap {
             ctx.interpolationQuality = .high
             ctx.draw(image.cropping(to: roi)!, in: CGRect(x: 0, y: 0, width: w, height: h))
         }
-        scale = s; width = w; height = h
-        let t = Bitmap.otsu(gray)
-        bits = gray.map { $0 < t ? 1 : 0 }
-        clearEdgeTouching()
-    }
-
-    /// Anything cut off by the crop boundary (a neighbouring digit row, the LCD edge, a label) is not a digit:
-    /// erase it before dilation so it can't weld onto the digits.
-    private mutating func clearEdgeTouching() {
-        var stack: [Int] = []
-        for x in 0..<width { stack += [x, (height - 1) * width + x] }          // top and bottom rows
-        for y in 0..<height { stack += [y * width, y * width + width - 1] }    // left and right columns
-        while let i = stack.popLast() {
-            guard bits[i] == 1 else { continue }
-            bits[i] = 0
-            let x = i % width
-            for n in [i - 1, i + 1, i - width, i + width] where n >= 0 && n < bits.count && bits[n] == 1 && abs(n % width - x) <= 1 { stack.append(n) }
+        scale = s; width = w; height = h; self.maxDigit = Int(CGFloat(maxDigit) * s)
+        let r = max(2, Int(CGFloat(window) * s))
+        var integral = [Int](repeating: 0, count: (w + 1) * (h + 1))
+        for y in 0..<h { var row = 0; for x in 0..<w { row += Int(gray[y * w + x]); integral[(y + 1) * (w + 1) + x + 1] = integral[y * (w + 1) + x + 1] + row } }
+        bits = [UInt8](repeating: 0, count: w * h)
+        for y in 0..<h {
+            let y0 = max(0, y - r), y1 = min(h, y + r + 1)
+            for x in 0..<w {
+                let x0 = max(0, x - r), x1 = min(w, x + r + 1)
+                let sum = integral[y1 * (w + 1) + x1] - integral[y0 * (w + 1) + x1] - integral[y1 * (w + 1) + x0] + integral[y0 * (w + 1) + x0]
+                // ponytail: fixed 15 % contrast margin; make it adaptive if faint LCDs drop segments
+                if Int(gray[y * w + x]) * 100 * (x1 - x0) * (y1 - y0) < sum * 85 { bits[y * w + x] = 1 }
+            }
+        }
+        if stripFrame { eraseLongRuns(self.maxDigit) }
+        clearNonDigits()
+        for r in erasing {   // the labels: a glyph stacked on "/min" can pass for a 1
+            let box = r.offsetBy(dx: -roi.minX, dy: -roi.minY).applying(CGAffineTransform(scaleX: s, y: s)).intersection(CGRect(x: 0, y: 0, width: w, height: h))
+            guard !box.isNull, !box.isEmpty else { continue }
+            for y in Int(box.minY)..<Int(box.maxY) { for x in Int(box.minX)..<Int(box.maxX) { bits[y * w + x] = 0 } }
         }
     }
 
-    private static func otsu(_ pixels: [UInt8]) -> UInt8 {
-        var hist = [Int](repeating: 0, count: 256)
-        for p in pixels { hist[Int(p)] += 1 }
-        let total = pixels.count
-        let sumAll = hist.enumerated().reduce(0) { $0 + $1.offset * $1.element }
-        var sumB = 0, wB = 0, best = 0.0, threshold = 0
-        for t in 0..<256 {
-            wB += hist[t]; guard wB > 0 else { continue }
-            let wF = total - wB; guard wF > 0 else { break }
-            sumB += t * hist[t]
-            let mB = Double(sumB) / Double(wB), mF = Double(sumAll - sumB) / Double(wF)
-            let between = Double(wB) * Double(wF) * (mB - mF) * (mB - mF)
-            if between > best { best = between; threshold = t }
+    /// The LCD frame and shadow edges are straight runs longer than any digit; digits often touch them,
+    /// so cut those runs away first or the digits get erased along with the frame.
+    private mutating func eraseLongRuns(_ limit: Int) {
+        var erase = [Bool](repeating: false, count: bits.count)
+        for (lines, length, step, lineStep) in [(height, width, 1, width), (width, height, width, 1)] {
+            for line in 0..<lines {
+                var start = 0
+                for i in 0...length {
+                    let dark = i < length && bits[line * lineStep + i * step] == 1
+                    if dark { continue }
+                    if i - start > limit { for j in start..<i { erase[line * lineStep + j * step] = true } }
+                    start = i + 1
+                }
+            }
         }
-        return UInt8(threshold)
+        var mask = self
+        mask.bits = erase.map { $0 ? 1 : 0 }
+        let halo = max(1, limit / 60)   // the frame's ragged edge, so no sliver stays welded to a digit
+        for (i, e) in mask.dilated(halo, halo).bits.enumerated() where e == 1 { bits[i] = 0 }
     }
 
-    /// Bounding boxes of connected dark regions after a square dilation of `radius`.
-    func blobs(dilatedBy radius: Int) -> [CGRect] {
-        // Separable box dilation via prefix sums: O(pixels) regardless of radius.
-        func dilate(_ src: [UInt8], stride: Int, length: Int, lines: Int, lineStride: Int) -> [UInt8] {
+    /// The sub-rectangle `ys` × `xs` alone, with whatever the cut sliced through erased.
+    func band(_ ys: Range<Int>, _ xs: Range<Int>) -> Bitmap {
+        var b = self
+        b.height = ys.count; b.width = xs.count
+        b.bits = ys.flatMap { y in bits[y * width + xs.lowerBound ..< y * width + xs.upperBound] }
+        b.clearNonDigits()
+        return b
+    }
+
+    func dark(row y: Int) -> Int { bits[y * width ..< (y + 1) * width].reduce(0) { $0 + Int($1) } }
+
+    /// Anything cut off by the crop boundary (a neighbouring digit row, a label) or bigger than a digit (the LCD frame,
+    /// a shadow) is not a digit: erase it before dilation so it can't weld onto the digits.
+    private mutating func clearNonDigits() {
+        var seen = [Bool](repeating: false, count: bits.count), component: [Int] = []
+        for start in 0..<bits.count where bits[start] == 1 && !seen[start] {
+            var minX = width, maxX = 0, minY = height, maxY = 0
+            component = [start]; seen[start] = true
+            var next = 0
+            while next < component.count {
+                let i = component[next], x = i % width, y = i / width; next += 1
+                minX = min(minX, x); maxX = max(maxX, x); minY = min(minY, y); maxY = max(maxY, y)
+                for n in [i - 1, i + 1, i - width, i + width] where n >= 0 && n < bits.count && bits[n] == 1 && !seen[n] && abs(n % width - x) <= 1 {
+                    seen[n] = true; component.append(n)
+                }
+            }
+            if minX == 0 || minY == 0 || maxX == width - 1 || maxY == height - 1 || maxX - minX > maxDigit || maxY - minY > maxDigit {
+                for i in component { bits[i] = 0 }
+            }
+        }
+    }
+
+    /// Box dilation by `rx` × `ry`: separable, via prefix sums, O(pixels) regardless of radius.
+    func dilated(_ rx: Int, _ ry: Int) -> Bitmap {
+        func dilate(_ src: [UInt8], radius: Int, stride: Int, length: Int, lines: Int, lineStride: Int) -> [UInt8] {
             var out = src
             var prefix = [Int](repeating: 0, count: length + 1)
             for line in 0..<lines {
@@ -123,8 +203,16 @@ private struct Bitmap {
             }
             return out
         }
-        var d = dilate(bits, stride: 1, length: width, lines: height, lineStride: width)   // rows
-        d = dilate(d, stride: width, length: height, lines: width, lineStride: 1)          // columns
+        var d = dilate(bits, radius: rx, stride: 1, length: width, lines: height, lineStride: width)   // rows
+        d = dilate(d, radius: ry, stride: width, length: height, lines: width, lineStride: 1)          // columns
+        var b = self
+        b.bits = d
+        return b
+    }
+
+    /// Bounding boxes of connected dark regions after a box dilation of `rx` × `ry`.
+    func blobs(dilatedBy rx: Int, _ ry: Int) -> [CGRect] {
+        var d = dilated(rx, ry).bits
         var rects: [CGRect] = []
         var stack: [Int] = []
         for start in 0..<d.count where d[start] == 1 {
