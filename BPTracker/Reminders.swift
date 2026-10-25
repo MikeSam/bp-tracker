@@ -1,15 +1,15 @@
 import SwiftUI
 import UserNotifications
 
-/// One daily local notification per weekday; Sat/Sun use the weekend time.
+/// Daily local notifications at each chosen time; Sat/Sun use the weekend times.
 enum Reminders {
     // ponytail: Sat/Sun weekend hardcoded; use Calendar.isDateInWeekend if Fri/Sat locales matter
     private static let weekendDays: Set<Int> = [1, 7]
 
-    static func schedule(weekdayTime: Date?, weekendTime: Date?) async {
+    static func schedule(weekdayTimes: [Date], weekendTimes: [Date]) async {
         let center = UNUserNotificationCenter.current()
         center.removeAllPendingNotificationRequests()
-        guard weekdayTime != nil || weekendTime != nil else { return }
+        guard !weekdayTimes.isEmpty || !weekendTimes.isEmpty else { return }
         guard (try? await center.requestAuthorization(options: [.alert, .sound])) == true else { return }
 
         let content = UNMutableNotificationContent()
@@ -18,45 +18,59 @@ enum Reminders {
         content.sound = .default
 
         for weekday in 1...7 {
-            guard let time = weekendDays.contains(weekday) ? weekendTime : weekdayTime else { continue }
-            var date = Calendar.current.dateComponents([.hour, .minute], from: time)
-            date.weekday = weekday
-            let trigger = UNCalendarNotificationTrigger(dateMatching: date, repeats: true)
-            try? await center.add(UNNotificationRequest(identifier: "bp-\(weekday)", content: content, trigger: trigger))
+            for (i, time) in (weekendDays.contains(weekday) ? weekendTimes : weekdayTimes).enumerated() {
+                var date = Calendar.current.dateComponents([.hour, .minute], from: time)
+                date.weekday = weekday
+                let trigger = UNCalendarNotificationTrigger(dateMatching: date, repeats: true)
+                try? await center.add(UNNotificationRequest(identifier: "bp-\(weekday)-\(i)", content: content, trigger: trigger))
+            }
         }
     }
 }
 
 struct SettingsView: View {
-    @AppStorage("weekdayOn") private var weekdayOn = false
-    @AppStorage("weekendOn") private var weekendOn = false
-    @AppStorage("weekdayTime") private var weekdayTime = Self.defaultTime(hour: 8)
-    @AppStorage("weekendTime") private var weekendTime = Self.defaultTime(hour: 10)
+    // The original single reminder per category is kept as the morning one.
+    @AppStorage("weekdayOn") private var weekdayMorningOn = false
+    @AppStorage("weekdayTime") private var weekdayMorning = Self.defaultTime(hour: 8)
+    @AppStorage("weekdayEveningOn") private var weekdayEveningOn = false
+    @AppStorage("weekdayEveningTime") private var weekdayEvening = Self.defaultTime(hour: 20)
+    @AppStorage("weekendOn") private var weekendMorningOn = false
+    @AppStorage("weekendTime") private var weekendMorning = Self.defaultTime(hour: 10)
+    @AppStorage("weekendEveningOn") private var weekendEveningOn = false
+    @AppStorage("weekendEveningTime") private var weekendEvening = Self.defaultTime(hour: 20)
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
         NavigationStack {
             Form {
                 Section("Weekdays") {
-                    Toggle("Remind me", isOn: $weekdayOn)
-                    if weekdayOn { timePicker($weekdayTime) }
+                    reminder("Morning", $weekdayMorningOn, $weekdayMorning)
+                    reminder("Evening", $weekdayEveningOn, $weekdayEvening)
                 }
                 Section("Weekend") {
-                    Toggle("Remind me", isOn: $weekendOn)
-                    if weekendOn { timePicker($weekendTime) }
+                    reminder("Morning", $weekendMorningOn, $weekendMorning)
+                    reminder("Evening", $weekendEveningOn, $weekendEvening)
                 }
             }
             .navigationTitle("Reminders")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } } }
-            .onChange(of: [weekdayOn ? weekdayTime : 0, weekendOn ? weekendTime : 0]) {
-                Task {
-                    await Reminders.schedule(
-                        weekdayTime: weekdayOn ? Date(timeIntervalSinceReferenceDate: weekdayTime) : nil,
-                        weekendTime: weekendOn ? Date(timeIntervalSinceReferenceDate: weekendTime) : nil)
-                }
+            .onChange(of: [weekdayTimes, weekendTimes]) {
+                Task { await Reminders.schedule(weekdayTimes: weekdayTimes, weekendTimes: weekendTimes) }
             }
         }
+    }
+
+    private var weekdayTimes: [Date] { times((weekdayMorningOn, weekdayMorning), (weekdayEveningOn, weekdayEvening)) }
+    private var weekendTimes: [Date] { times((weekendMorningOn, weekendMorning), (weekendEveningOn, weekendEvening)) }
+    private func times(_ slots: (Bool, Double)...) -> [Date] {
+        slots.filter(\.0).map { Date(timeIntervalSinceReferenceDate: $0.1) }
+    }
+
+    @ViewBuilder
+    private func reminder(_ title: String, _ on: Binding<Bool>, _ time: Binding<Double>) -> some View {
+        Toggle(title, isOn: on)
+        if on.wrappedValue { timePicker(time) }
     }
 
     /// AppStorage can't hold Date, so times are stored as timeIntervalSinceReferenceDate.
