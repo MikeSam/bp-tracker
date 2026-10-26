@@ -2,6 +2,16 @@
 
 iOS app that logs blood pressure from a photo of a home monitor's display. It saves readings to Apple Health and shows charts, reminders and a PDF report.
 
+![BPTracker](docs/screenshots/header.jpg)
+
+<p>
+  <img src="docs/screenshots/1-scan.png" width="19%" alt="Scan">
+  <img src="docs/screenshots/2-30D.png" width="19%" alt="30-day chart">
+  <img src="docs/screenshots/3-1Y.png" width="19%" alt="1-year chart">
+  <img src="docs/screenshots/4-report.png" width="19%" alt="PDF report">
+  <img src="docs/screenshots/5-reminders.png" width="19%" alt="Reminders">
+</p>
+
 ## Reading the display
 
 Vision locates the printed `SYS`, `DIA` and `PUL`/`PULSE` labels. The 7-segment digits beside each label are then decoded segment by segment (`BPTracker/Reader.swift`). The labels can be on either side of the digits. Any monitor with a dark-on-light LCD and those three labels stacked beside the numbers should work. A value that can't be read is left blank, never guessed.
