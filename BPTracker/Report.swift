@@ -12,7 +12,10 @@ struct Report: Identifiable {
         let url = FileManager.default.temporaryDirectory.appending(path: String(localized: "Blood Pressure") + ".pdf")
         let usLetter = Locale.current.measurementSystem == .us
         var page = CGRect(origin: .zero, size: usLetter ? CGSize(width: 612, height: 792) : CGSize(width: 595, height: 842))
-        guard let pdf = CGContext(url as CFURL, mediaBox: &page, nil) else { throw CocoaError(.fileWriteUnknown) }
+        // Render in memory so the file only ever exists under complete protection: unreadable while the phone is locked.
+        let data = NSMutableData()
+        guard let consumer = CGDataConsumer(data: data),
+              let pdf = CGContext(consumer: consumer, mediaBox: &page, nil) else { throw CocoaError(.fileWriteUnknown) }
 
         var rows = readings.reversed()[...]   // newest first
         var pageNumber = 1
@@ -27,6 +30,7 @@ struct Report: Identifiable {
             pageNumber += 1
         } while !rows.isEmpty
         pdf.closePDF()
+        try (data as Data).write(to: url, options: [.atomic, .completeFileProtection])
         return url
     }
 }
@@ -129,6 +133,7 @@ struct ReportPreview: View {
             await Task.yield()   // let the sheet and spinner draw before rendering blocks the main actor
             do { url = try report.pdf() } catch { self.error = error.localizedDescription }
         }
+        .onDisappear { if let url { try? FileManager.default.removeItem(at: url) } }   // health data, don't leave it in tmp
     }
 }
 
