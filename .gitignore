@@ -28,3 +28,6 @@ Package.resolved
 .agents/
 .claude/
 skills-lock.json
+
+# Signing (see Config.xcconfig)
+Local.xcconfig
