@@ -45,7 +45,7 @@ struct Window: Equatable {
     func bars(_ readings: [BPSample]) -> [Bar] {
         let shown = filter(readings)
         guard let bucket else {
-            return shown.map { Bar(id: $0.date, interval: DateInterval(start: $0.date, duration: 0), sys: $0.sys...$0.sys, dia: $0.dia...$0.dia, pulse: $0.pulse, count: 1) }
+            return shown.map { Bar(id: $0.date, interval: DateInterval(start: $0.date, duration: 0), sys: $0.sys...$0.sys, dia: $0.dia...$0.dia, pulse: $0.pulse, count: 1, last: $0.date) }
         }
         let cal = Calendar.current
         return Dictionary(grouping: shown) { cal.dateInterval(of: bucket, for: $0.date)!.start }
@@ -53,7 +53,8 @@ struct Window: Equatable {
                 let sys = group.map(\.sys), dia = group.map(\.dia), pulses = group.compactMap(\.pulse)
                 return Bar(id: start, interval: cal.dateInterval(of: bucket, for: start)!,
                            sys: sys.min()!...sys.max()!, dia: dia.min()!...dia.max()!,
-                           pulse: pulses.isEmpty ? nil : pulses.reduce(0, +) / pulses.count, count: group.count)
+                           pulse: pulses.isEmpty ? nil : pulses.reduce(0, +) / pulses.count, count: group.count,
+                           last: group.map(\.date).max()!)
             }
             .sorted { $0.id < $1.id }
     }
@@ -71,6 +72,7 @@ struct Bar: Identifiable {
     let dia: ClosedRange<Int>
     let pulse: Int?           // mean over the bucket
     let count: Int
+    let last: Date            // latest reading time; `id` is midnight for a one-reading bucket
 
     var mid: Date { interval.start.addingTimeInterval(interval.duration / 2) }
     var values: String {
@@ -79,7 +81,7 @@ struct Bar: Identifiable {
     }
     var when: String {
         switch count {
-        case 1: id.formatted(date: .abbreviated, time: .shortened)
+        case 1: last.formatted(date: .abbreviated, time: .shortened)
         default: String(localized: "\(count) readings") + " · " + (interval.duration <= 86_400 ? id.formatted(date: .abbreviated, time: .omitted)
                                                                          : (interval.start..<interval.end).formatted(date: .abbreviated, time: .omitted))
         }

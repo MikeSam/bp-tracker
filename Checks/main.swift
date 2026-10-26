@@ -40,6 +40,7 @@ if CommandLine.arguments.count > 1 {           // ad-hoc: print readings for the
         let inside = readings.filter { bar.interval.contains($0.date) }
         precondition(bar.count == inside.count && bar.sys == inside.map(\.sys).min()!...inside.map(\.sys).max()!, "\(bar)")
         precondition(bar.pulse == inside.compactMap(\.pulse).reduce(0, +) / inside.count, "\(bar)")
+        precondition(bar.last == inside.map(\.date).max()!, "\(bar)")
     }
     let year = DateRange.custom.window(custom: Date(timeIntervalSinceNow: -365 * day) ... .now)
     precondition(year.bars(readings).allSatisfy { $0.interval.duration >= 7 * day - 3_600 } && year.bars([]).isEmpty)
