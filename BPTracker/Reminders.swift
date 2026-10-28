@@ -16,6 +16,7 @@ enum Reminders {
         content.title = NSString.localizedUserNotificationString(forKey: "Blood pressure check", arguments: nil)   // resolved at delivery, in the current language
         content.body = NSString.localizedUserNotificationString(forKey: "Measure and scan your monitor.", arguments: nil)
         content.sound = .default
+        content.categoryIdentifier = Snooze.category
 
         for weekday in 1...7 {
             for (i, time) in (weekendDays.contains(weekday) ? weekendTimes : weekdayTimes).enumerated() {
@@ -25,6 +26,38 @@ enum Reminders {
                 try? await center.add(UNNotificationRequest(identifier: "bp-\(weekday)-\(i)", content: content, trigger: trigger))
             }
         }
+    }
+}
+
+/// "Remind in 30 min / 1 hour" buttons on the reminder; a tap re-sends the same notification after the delay.
+final class Snooze: NSObject, UNUserNotificationCenterDelegate {
+    static let category = "bp"
+    private static let shared = Snooze()
+    private static let delays: [String: TimeInterval] = ["snooze-30m": 30 * 60, "snooze-1h": 60 * 60]
+
+    /// Call at launch: the delegate must be set before the app finishes launching to receive taps made while it wasn't running.
+    static func register() {
+        let center = UNUserNotificationCenter.current()
+        center.delegate = shared
+        center.setNotificationCategories([UNNotificationCategory(identifier: category, actions: [
+            UNNotificationAction(identifier: "snooze-30m", title: String(localized: "Remind in 30 min")),
+            UNNotificationAction(identifier: "snooze-1h", title: String(localized: "Remind in 1 hour")),
+        ], intentIdentifiers: [])])
+        // Reminders scheduled by older versions lack the category, so they'd show no buttons until Settings is touched.
+        Task {
+            for request in await center.pendingNotificationRequests() where request.content.categoryIdentifier.isEmpty {
+                let content = request.content.mutableCopy() as! UNMutableNotificationContent
+                content.categoryIdentifier = category
+                try? await center.add(UNNotificationRequest(identifier: request.identifier, content: content, trigger: request.trigger))
+            }
+        }
+    }
+
+    func userNotificationCenter(_ center: UNUserNotificationCenter, didReceive response: UNNotificationResponse) async {
+        guard let delay = Self.delays[response.actionIdentifier] else { return }
+        let trigger = UNTimeIntervalNotificationTrigger(timeInterval: delay, repeats: false)
+        // One fixed id: snoozing again replaces the pending snooze instead of stacking them.
+        try? await center.add(UNNotificationRequest(identifier: "snooze", content: response.notification.request.content, trigger: trigger))
     }
 }
 
