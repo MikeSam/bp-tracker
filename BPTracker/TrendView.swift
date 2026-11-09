@@ -88,35 +88,36 @@ struct Bar: Identifiable {
     }
 }
 
-/// Latest reading as a headline plus a trend chart of the selected window.
+/// Latest reading in the selected window as a headline plus a trend chart of the window.
 struct TrendView: View {
     let readings: [BPSample]
     let window: Window
 
     var body: some View {
-        if let latest = readings.last {
-            let when = latest.date.formatted(date: .abbreviated, time: .shortened)
-            VStack(alignment: .leading, spacing: 4) {
-                Text("\(latest.sys)/\(latest.dia)")
-                    .font(.system(.largeTitle, design: .rounded, weight: .semibold))
-                    .monospacedDigit()
-                + Text(" mmHg").font(.title3).foregroundStyle(.secondary)
-                + Text(latest.pulse.map { "  " + String(localized: "\($0) bpm") } ?? "").font(.title3).foregroundStyle(.pink)
-                Text(when)
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .accessibilityElement(children: .combine)
-            .accessibilityLabel(latest.pulse.map { String(localized: "Latest reading \(latest.sys) over \(latest.dia), pulse \($0), \(when)") }
-                                ?? String(localized: "Latest reading \(latest.sys) over \(latest.dia), \(when)"))
-
-            BPChart(readings: readings, window: window)
-                .frame(height: 240)
-        } else {
+        if readings.isEmpty {
             ContentUnavailableView(
                 "No readings yet", systemImage: "waveform.path.ecg",
                 description: Text("Scan your monitor to add one. If you already have readings, allow access in Health → Sharing → Apps."))
+        } else {
+            if let latest = window.filter(readings).last {   // none in range: the chart says so, no headline from outside it
+                let when = latest.date.formatted(date: .abbreviated, time: .shortened)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("\(latest.sys)/\(latest.dia)")
+                        .font(.system(.largeTitle, design: .rounded, weight: .semibold))
+                        .monospacedDigit()
+                    + Text(" mmHg").font(.title3).foregroundStyle(.secondary)
+                    + Text(latest.pulse.map { "  " + String(localized: "\($0) bpm") } ?? "").font(.title3).foregroundStyle(.pink)
+                    Text(when)
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .accessibilityElement(children: .combine)
+                .accessibilityLabel(latest.pulse.map { String(localized: "Latest reading \(latest.sys) over \(latest.dia), pulse \($0), \(when)") }
+                                    ?? String(localized: "Latest reading \(latest.sys) over \(latest.dia), \(when)"))
+            }
+            BPChart(readings: readings, window: window)
+                .frame(height: 240)
         }
     }
 }
