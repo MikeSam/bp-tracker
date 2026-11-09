@@ -30,7 +30,8 @@ func readDisplay(_ image: CGImage) async throws -> Reading {
         let width = 3.2 * pitch
         let roi = CGRect(x: leftOfLabels ? edge - width : edge, y: top, width: width, height: bottom - top).intersection(bounds)
         guard !roi.isEmpty else { return Reading() }
-        let bitmap = Bitmap(image, roi: roi, scale: min(3, 150 / pitch), window: Int(0.3 * pitch), maxDigit: Int(1.3 * pitch), stripFrame: stripFrame, erasing: rows.map(\.1))   // ~150 px per row: enough detail, JPEG speckle averaged away
+        // The threshold window also sets how far the dark LCD bezel bleeds inward; wider welds tall digits to it (Omron M2 Plus).
+        let bitmap = Bitmap(image, roi: roi, scale: min(3, 150 / pitch), window: Int(0.25 * pitch), maxDigit: Int(1.3 * pitch), stripFrame: stripFrame, erasing: rows.map(\.1))   // ~150 px per row: enough detail, JPEG speckle averaged away
         let s = bitmap.scale, rx = max(1, Int(0.01 * pitch * s)), ry = Int(0.035 * pitch * s)   // vertical: joins a digit's segments, not neighbours
         // Rows of digits nearly touch on some displays, so each row is read on its own band of the crop: cut between
         // neighbouring rows, and above the first / below the last (date, captions), at the emptiest scanline nearest
@@ -46,7 +47,7 @@ func readDisplay(_ image: CGImage) async throws -> Reading {
         var cuts = [cut(ys[0] - 1.1 * unit ... ys[0] - 0.35 * unit, near: ys[0])]
         for (a, b) in zip(ys, ys.dropFirst()) { cuts.append(max(cuts.last!, cut((a + b) / 2 - 0.3 * (b - a) ... (a + b) / 2 + 0.3 * (b - a), near: (a + b) / 2))) }
         cuts.append(cut(ys.last! + 0.2 * unit ... ys.last! + 1.1 * unit, near: ys.last!) + 1)
-        var values: [String: Int] = [:]
+        var values: [String: Int] = [:], heights: [String: CGFloat] = [:]
         for (i, (key, label)) in rows.enumerated() where cuts[i] < cuts[i + 1] {
             // Trim to this row's own label, so the frame beside it is cut and erased.
             let x = Int(((leftOfLabels ? label.minX : label.maxX) - roi.minX) * s)
@@ -60,11 +61,17 @@ func readDisplay(_ image: CGImage) async throws -> Reading {
             // A 1 sits at the right of its digit cell, so measure gaps between whole cells.
             let cell = max(row.map(\.width).max() ?? 0, 0.5 * tallest)
             var run = Array(row.prefix(1))
-            for b in row.dropFirst() where (leftOfLabels ? run.last!.maxX - cell - b.maxX : b.maxX - cell - run.last!.maxX) < 0.5 * tallest { run.append(b) }
+            // Digit cells don't overlap: a blob less than a cell past the last digit is something else (a bar graph segment).
+            for b in row.dropFirst() {
+                let step = leftOfLabels ? run.last!.maxX - b.maxX : b.maxX - run.last!.maxX
+                if step > 0.8 * cell && step - cell < 0.5 * tallest { run.append(b) }
+            }
             let digits = run.sorted { $0.minX < $1.minX }.map { band.digit(in: $0.insetBy(dx: CGFloat(rx), dy: CGFloat(ry))) }
             guard (1...3).contains(digits.count), digits.allSatisfy({ $0 != nil }), let n = Int(digits.map { String($0!) }.joined()) else { continue }
-            values[key] = n
+            values[key] = n; heights[key] = tallest
         }
+        // SYS and DIA are printed the same size; a mismatch means one row is fragments of digits (half of each, split by a frame cut).
+        if let hs = heights["SYS"], let hd = heights["DIA"], abs(hs - hd) > 0.2 * max(hs, hd) { return Reading() }
         return Reading(sys: values["SYS"], dia: values["DIA"], pulse: values["PUL"])
     }
     func plausible(_ r: Reading) -> Int {

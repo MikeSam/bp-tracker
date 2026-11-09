@@ -24,6 +24,7 @@ These are verified by photos in `Checks/` (run the check below):
 |---|---|---|---|---|
 | B.Well MED-55 | upper arm | ✅ | ✅ | `med55.png`, `med55-2.png`, `med55-3.jpg` |
 | Omron HEM-7120 (same housing as M2 / 3 Series) | upper arm | ✅ | ✅ 1 of 3 photos | `omron-hem7120*.jpg` |
+| Omron M2 Plus | upper arm | ✅ | ✅ | `omron-m2-plus.jpg` |
 | Omron M3 | upper arm | ✅ | ✅ | `omron-m3.jpg` |
 | Omron R6 | wrist | ✅ | ✅ | `omron-r6.jpg` |
 | Sanitas (wrist) | wrist | ✅ | ✅ | `sanitas-wrist.jpg` |

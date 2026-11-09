@@ -13,6 +13,7 @@ let fixtures: [(path: String, sys: Int, dia: Int, pulse: Int?)] = [
     ("Checks/omron-hem7120-2.jpg", 161, 89, 64),
     ("Checks/omron-hem7120-3.jpg", 109, 82, nil),
     ("Checks/omron-m3.jpg", 131, 78, 67),
+    ("Checks/omron-m2-plus.jpg", 104, 70, 74),
     ("Checks/omron-r6.jpg", 114, 75, 72),
     ("Checks/sanitas-wrist.jpg", 120, 74, 80),
     ("Checks/microlife.jpg", 138, 73, nil),
