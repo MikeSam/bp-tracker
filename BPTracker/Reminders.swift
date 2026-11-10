@@ -30,6 +30,9 @@ enum Reminders {
 }
 
 /// "Remind in 30 min / 1 hour" buttons on the reminder; a tap re-sends the same notification after the delay.
+/// @MainActor: the async didReceive otherwise finishes on a background thread, and UIKit aborts when the
+/// system's completion handler runs off the main thread.
+@MainActor
 final class Snooze: NSObject, UNUserNotificationCenterDelegate {
     static let category = "bp"
     private static let shared = Snooze()
