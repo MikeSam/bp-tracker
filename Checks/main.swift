@@ -48,6 +48,78 @@ if CommandLine.arguments.count > 1 {           // ad-hoc: print readings for the
     let twoDays = DateRange.custom.window(custom: Date(timeIntervalSinceNow: -2 * day) ... .now)
     precondition(twoDays.bucket == nil && twoDays.bars(readings).allSatisfy { $0.count == 1 })
 
+    // Typed values: whole-input parse, nothing trimmed into a different number.
+    for (text, want) in [("120", Parsed.number(120)), (" 120 ", .number(120)), ("", .empty), ("  ", .empty), ("007", .number(7)),
+                         ("1200", .number(1200)), ("-120", .invalid), ("1.5", .invalid), ("1,5", .invalid), ("1 200", .invalid),
+                         ("12a", .invalid), ("Ⅻ", .invalid), ("½", .invalid), ("１２０", .number(120)), ("٣٤", .number(34)),
+                         ("99999999999999999999", .number(.max))] {
+        precondition(parse(text) == want, "parse(\"\(text)\") = \(parse(text)), want \(want)")
+    }
+    func issues(_ s: String, _ d: String, _ p: String = "") -> [Field: Issue] { validate(sys: s, dia: d, pulse: p).issues }
+    func saves(_ s: String, _ d: String, _ p: String = "") -> Bool { validate(sys: s, dia: d, pulse: p).values != nil }
+    precondition(issues("120", "80", "65").isEmpty && saves("120", "80", "65") && saves("120", "80"))
+    precondition(validate(sys: "120", dia: "80", pulse: "").values! == (120, 80, nil))
+    // Hard limits: one past them is an error; the endpoints save.
+    for (s, d, p, field, issue) in [("49", "30", "", Field.sys, Issue.below(50)), ("301", "80", "", .sys, .above(300)),
+                                    ("120", "19", "", .dia, .below(20)), ("300", "251", "", .dia, .above(250)),
+                                    ("120", "80", "24", .pulse, .below(25)), ("120", "80", "251", .pulse, .above(250)),
+                                    ("1200", "80", "", .sys, .above(300)), ("", "80", "", .sys, .missing), ("120", "", "", .dia, .missing),
+                                    ("120", "80", "6x", .pulse, .notANumber), ("80", "120", "", .gap, .sysNotAboveDia), ("90", "90", "", .gap, .sysNotAboveDia)] {
+        precondition(issues(s, d, p)[field] == issue && !saves(s, d, p), "\(s)/\(d)/\(p): \(issues(s, d, p))")
+    }
+    precondition(saves("300", "250", "250") && saves("70", "50", "25"))
+    // Warnings: saveable, but flagged low or high.
+    precondition(issues("79", "60")[.sys] == .unusuallyLow && issues("201", "100")[.sys] == .unusuallyHigh && saves("201", "100"))
+    precondition(issues("120", "39")[.dia] == .unusuallyLow && issues("240", "131")[.dia] == .unusuallyHigh && saves("240", "210"))
+    precondition(issues("120", "80", "39")[.pulse] == .unusuallyLow && issues("120", "80", "151")[.pulse] == .unusuallyHigh)
+    precondition(issues("80", "40", "40")[.sys] == nil && issues("200", "130", "150")[.dia] == nil)
+    // Gap: 15…100 is quiet, 14 and 101 are flagged; an out-of-range field gets no gap check at all.
+    precondition(issues("115", "100")[.gap] == nil && issues("114", "100")[.gap] == .unusualGap && saves("114", "100"))
+    precondition(issues("180", "80")[.gap] == nil && issues("181", "80")[.gap] == .unusualGap)
+    precondition(issues("1200", "80")[.gap] == nil && issues("\(Int.max)", "\(Int.min)")[.sys] == .above(300))
+    precondition(Limits.allows(sys: 120, dia: 80, pulse: nil) && !Limits.allows(sys: 120, dia: 80, pulse: 300) && !Limits.allows(sys: Int.max, dia: Int.min, pulse: nil))
+
+    // Pulse links: only a heart rate known to belong to a reading is edited/deleted with it (pulseID);
+    // others may still show the nearest unlinked pulse within a minute.
+    let t = Date(timeIntervalSince1970: 1_800_000_000)
+    func bp(_ at: Date, own: Bool = true, id: String? = nil) -> BPSample {
+        BPSample(id: UUID(), date: at, sys: 120, dia: 80, isOwn: own, sourceName: own ? "BP Tracker" : "Omron", readingID: id)
+    }
+    func merge(_ bps: [BPSample], _ hrs: [(UUID, Date, Int, String?)]) -> [BPSample] {
+        let m = Health.Merged()
+        m.bps = bps
+        for (id, at, n, rid) in hrs { m.pulses[id] = .init(date: at, bpm: n, readingID: rid) }
+        return m.readings
+    }
+    let hrA = UUID(), hrB = UUID()
+    var out = merge([bp(t, id: "A")], [(hrA, t, 70, "A")])
+    precondition(out[0].pulseID == hrA && out[0].pulse == 70)
+    out = merge([bp(t, id: "A"), bp(t.addingTimeInterval(10), id: "B")], [(hrA, t, 70, "A")])   // B saved without pulse: doesn't borrow A's
+    precondition(out[0].pulseID == hrA && out[1].pulse == nil && out[1].pulseID == nil)
+    out = merge([bp(t)], [(hrA, t, 70, nil)])   // before IDs: exact time, nothing else there
+    precondition(out[0].pulseID == hrA && out[0].pulse == 70)
+    out = merge([bp(t), bp(t)], [(hrA, t, 70, nil)])   // two readings at that instant: ambiguous, display only
+    precondition(out.allSatisfy { $0.pulseID == nil && $0.pulse == 70 })
+    out = merge([bp(t)], [(hrA, t, 70, nil), (hrB, t, 72, nil)])
+    precondition(out[0].pulseID == nil)
+    out = merge([bp(t)], [(hrA, t.addingTimeInterval(10), 70, nil)])   // close but not exact: display only
+    precondition(out[0].pulseID == nil && out[0].pulse == 70)
+    out = merge([bp(t, own: false)], [(hrA, t, 70, nil)])   // another app's reading never owns our heart rate
+    precondition(out[0].pulseID == nil && out[0].pulse == 70)
+    out = merge([bp(t), bp(t.addingTimeInterval(20), id: "B")], [(hrA, t.addingTimeInterval(20), 70, "B")])   // a linked pulse isn't lent out
+    precondition(out[0].pulse == nil && out[1].pulseID == hrA)
+
+    // The same rule on fresh Health data at delete/edit time: a link that became ambiguous is dropped.
+    precondition(Health.linkedPulse(readingID: "A", unlinkedReadingsAtSameTime: 0, candidates: [(hrA, "A")]) == hrA)
+    precondition(Health.linkedPulse(readingID: "A", unlinkedReadingsAtSameTime: 0, candidates: [(hrA, "A"), (hrB, "A")]) == nil)
+    precondition(Health.linkedPulse(readingID: "A", unlinkedReadingsAtSameTime: 0, candidates: [(hrA, nil)]) == nil)
+    precondition(Health.linkedPulse(readingID: nil, unlinkedReadingsAtSameTime: 1, candidates: [(hrA, nil)]) == hrA)
+    precondition(Health.linkedPulse(readingID: nil, unlinkedReadingsAtSameTime: 2, candidates: [(hrA, nil)]) == nil)   // another reading synced in at that time
+    precondition(Health.linkedPulse(readingID: nil, unlinkedReadingsAtSameTime: 1, candidates: [(hrA, nil), (hrB, nil)]) == nil)
+    precondition(Health.linkedPulse(readingID: nil, unlinkedReadingsAtSameTime: 1, candidates: [(hrA, "B")]) == nil)
+    let window = Health.timeWindow(around: t)   // the fresh lookup's query window must strictly contain the reading's time
+    precondition(window.lowerBound < t && t < window.upperBound)
+
     for f in fixtures {
         let r = try await read(f.path)
         precondition(r.sys == f.sys && r.dia == f.dia && r.pulse == f.pulse, "\(f.path): got \(r.sys ?? 0)/\(r.dia ?? 0)/\(r.pulse ?? 0)")

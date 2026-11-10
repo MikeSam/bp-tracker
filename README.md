@@ -55,10 +55,18 @@ Monitor names are used only to describe compatibility. B.Well, Omron, Microlife,
 
 To add a monitor, put a sharp, glare-free photo in `Checks/`, add its expected values to `fixtures` in `Checks/main.swift`, and run the check.
 
+## Checking and editing values
+
+Before saving, the form checks each value. A reading can't be saved with systolic outside 50–300, diastolic outside 20–250, pulse outside 25–250, or systolic not above diastolic. These limits catch typos; they aren't medical ranges. Values that are possible but unusual (systolic outside 80–200, diastolic outside 40–130, pulse outside 40–150, or a systolic–diastolic gap outside 15–100) get a hint to check them, and can still be saved. Limits live in `Limits` in `BPTracker/Reader.swift`.
+
+**History** lists the readings in the selected range. Tap a reading to edit it, swipe to delete it. Health has no way to change a saved reading, so an edit saves the new reading first and then deletes the old one. Only readings this app saved can be changed: Health doesn't let an app delete another app's data.
+
+Each reading is saved with an ID in its metadata, on the blood pressure and on the pulse, so the pulse is edited and deleted together with its reading. Readings saved before this keep their pulse link only when the pulse has exactly the same time and nothing else shares it.
+
 ## Checks
 
 ```sh
-swiftc -target arm64-apple-macos15.0 BPTracker/Reader.swift BPTracker/TrendView.swift BPTracker/Health.swift Checks/main.swift -o /tmp/reader_check && /tmp/reader_check
+swiftc -target arm64-apple-macos15.0 BPTracker/Reader.swift BPTracker/TrendView.swift BPTracker/Health.swift Checks/main.swift -o /tmp/reader_check && /tmp/reader_check   # photos, chart buckets, value checks, pulse links
 /tmp/reader_check photo.jpg   # print what the reader sees in any photo
 ```
 

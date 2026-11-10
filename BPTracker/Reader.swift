@@ -10,6 +10,84 @@ struct Reading: Identifiable {
     var date: Date = .now
 }
 
+/// The app's entry limits for a reading. They catch typos and misreads; they are not medical ranges,
+/// so a value inside `usual…` can still be unhealthy. Outside the hard ranges a reading can't be saved;
+/// outside the usual ones the form only asks to check the value.
+enum Limits {
+    static let sys = 50...300, dia = 20...250, pulse = 25...250   // diastolic up to 250: some monitors report 215
+    static let usualSys = 80...200, usualDia = 40...130, usualPulse = 40...150
+    static let usualGap = 15...100   // systolic minus diastolic; outside this a digit is often mistyped
+
+    static func allows(sys: Int, dia: Int, pulse: Int?) -> Bool {
+        validate(sys: String(sys), dia: String(dia), pulse: pulse.map(String.init) ?? "").values != nil
+    }
+}
+
+enum Field: Hashable { case sys, dia, pulse, gap }
+
+enum Issue: Hashable {
+    // errors: the reading can't be saved
+    case missing, notANumber, below(Int), above(Int), sysNotAboveDia
+    // warnings: possible, but worth a second look
+    case unusuallyLow, unusuallyHigh, unusualGap
+
+    var isError: Bool {
+        switch self {
+        case .missing, .notANumber, .below, .above, .sysNotAboveDia: true
+        case .unusuallyLow, .unusuallyHigh, .unusualGap: false
+        }
+    }
+}
+
+struct Validation {
+    /// At most one issue per field; an error always wins over a warning.
+    var issues: [Field: Issue] = [:]
+    /// The values to save, or nil while any field has an error.
+    var values: (sys: Int, dia: Int, pulse: Int?)?
+}
+
+enum Parsed: Equatable { case empty, number(Int), invalid }
+
+/// Whole-input parse of a typed value: digits only (any script's decimal digits), surrounding spaces ignored.
+/// Nothing is trimmed or corrected, so "1200" stays 1200 and "-120" or "1.5" is invalid.
+func parse(_ text: String) -> Parsed {
+    let trimmed = text.trimmingCharacters(in: .whitespaces)
+    if trimmed.isEmpty { return .empty }
+    // decimal digits only: a Roman numeral or a fraction also has a numeric value
+    guard trimmed.allSatisfy({ $0.unicodeScalars.count == 1 && $0.unicodeScalars.first!.properties.numericType == .decimal }) else { return .invalid }
+    let digits = trimmed.drop { $0.wholeNumberValue == 0 }
+    if digits.count > 6 { return .number(.max) }   // far above any limit; avoids Int overflow on a long paste
+    return .number(digits.reduce(0) { $0 * 10 + $1.wholeNumberValue! })
+}
+
+/// Checks the three form fields. SYS and DIA are required, pulse is optional (empty is fine, text that isn't a number is not).
+func validate(sys sysText: String, dia diaText: String, pulse pulseText: String) -> Validation {
+    var result = Validation()
+    func check(_ text: String, _ field: Field, required: Bool, hard: ClosedRange<Int>, usual: ClosedRange<Int>) -> Int? {
+        switch parse(text) {
+        case .empty: if required { result.issues[field] = .missing }; return nil
+        case .invalid: result.issues[field] = .notANumber; return nil
+        case .number(let n):
+            if n < hard.lowerBound { result.issues[field] = .below(hard.lowerBound); return nil }
+            if n > hard.upperBound { result.issues[field] = .above(hard.upperBound); return nil }
+            if n < usual.lowerBound { result.issues[field] = .unusuallyLow }
+            if n > usual.upperBound { result.issues[field] = .unusuallyHigh }
+            return n
+        }
+    }
+    let sys = check(sysText, .sys, required: true, hard: Limits.sys, usual: Limits.usualSys)
+    let dia = check(diaText, .dia, required: true, hard: Limits.dia, usual: Limits.usualDia)
+    let pulse = check(pulseText, .pulse, required: false, hard: Limits.pulse, usual: Limits.usualPulse)
+    if let sys, let dia {   // both in range, so the subtraction can't overflow
+        if sys <= dia { result.issues[.gap] = .sysNotAboveDia }
+        else if !Limits.usualGap.contains(sys - dia) { result.issues[.gap] = .unusualGap }
+    }
+    if let sys, let dia, !result.issues.values.contains(where: \.isError) {
+        result.values = (sys, dia, pulse)
+    }
+    return result
+}
+
 /// Reads SYS / DIA / PUL from a photo of a home blood pressure monitor's LCD.
 /// Vision's text recognizer can't read the 7-segment digits, so it is only used to locate the
 /// printed SYS / DIA / PUL(SE) labels; the digits beside each label are decoded by sampling their segments.

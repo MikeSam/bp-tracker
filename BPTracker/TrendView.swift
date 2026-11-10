@@ -184,7 +184,7 @@ extension [BPSample] {
             let day = i / 2, evening = i % 2 == 0, trend = day / 40
             return BPSample(id: UUID(), date: Date(timeIntervalSinceNow: -Double(day) * 86_400 - (evening ? 3_600 : 13 * 3_600)),
                             sys: 114 + trend + (day * 7) % 13 + (evening ? 4 : 0), dia: 73 + trend / 2 + (day * 5) % 9,
-                            pulse: 60 + (i * 3) % 13)
+                            pulse: 60 + (i * 3) % 13, pulseID: UUID(), isOwn: true, sourceName: "BP Tracker")
         }
     }
 }
