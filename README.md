@@ -74,14 +74,14 @@ swiftc -target arm64-apple-macos15.0 BPTracker/Reader.swift BPTracker/TrendView.
 
 ## Photo credits
 
-The `med55*` photos are our own. The other photos come from Wikimedia Commons:
+The `med55*` and `omron-m2-plus.jpg` photos are our own. The other photos come from Wikimedia Commons. Some were cropped or scaled down for the checks. Changed versions are shared under the same license as the originals.
 
 | File | Author | License | Source |
 |---|---|---|---|
-| `omron-hem7120.jpg` | Amit article21 | CC BY-SA 4.0 | [Souravdeep.jpg](https://commons.wikimedia.org/wiki/File:Souravdeep.jpg) |
-| `omron-hem7120-2.jpg` | Henrique Lincon | CC0 | [Imagem pressao 5.jpg](https://commons.wikimedia.org/wiki/File:Imagem_pressao_5.jpg) |
-| `omron-hem7120-3.jpg` | Henrique Lincon | CC0 | [Imagem pressao 4.jpg](https://commons.wikimedia.org/wiki/File:Imagem_pressao_4.jpg) |
-| `omron-m3.jpg` | Dmitry G | CC BY-SA 3.0 | [Display of Omron M3 20151122.jpg](https://commons.wikimedia.org/wiki/File:Display_of_Omron_M3_20151122.jpg) |
-| `omron-r6.jpg` | Amirhossein Ashrafzadeh | CC BY-SA 4.0 | [Blood Pressure & Heart Rate on Omron R6 20150222.jpg](https://commons.wikimedia.org/wiki/File:Blood_Pressure_%26_Heart_Rate_on_Omron_R6_20150222.jpg) |
-| `sanitas-wrist.jpg` | Jacek Halicki | CC BY-SA 4.0 | [2017 Sfigmomanometr elektroniczny.jpg](https://commons.wikimedia.org/wiki/File:2017_Sfigmomanometr_elektroniczny.jpg) |
-| `microlife.jpg` | Jacek Halicki | CC BY-SA 4.0 | [2020 Sfigmomanometr elektroniczny.jpg](https://commons.wikimedia.org/wiki/File:2020_Sfigmomanometr_elektroniczny.jpg) |
+| `omron-hem7120.jpg` | Amit article21 | [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/) | [Souravdeep.jpg](https://commons.wikimedia.org/wiki/File:Souravdeep.jpg) |
+| `omron-hem7120-2.jpg` | Henrique Lincon | [CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/) | [Imagem pressao 5.jpg](https://commons.wikimedia.org/wiki/File:Imagem_pressao_5.jpg) |
+| `omron-hem7120-3.jpg` | Henrique Lincon | [CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/) | [Imagem pressao 4.jpg](https://commons.wikimedia.org/wiki/File:Imagem_pressao_4.jpg) |
+| `omron-m3.jpg` | Dmitry G | [CC BY-SA 3.0](https://creativecommons.org/licenses/by-sa/3.0/) | [Display of Omron M3 20151122.jpg](https://commons.wikimedia.org/wiki/File:Display_of_Omron_M3_20151122.jpg) |
+| `omron-r6.jpg` | Amirhossein Ashrafzadeh | [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/) | [Blood Pressure & Heart Rate on Omron R6 20150222.jpg](https://commons.wikimedia.org/wiki/File:Blood_Pressure_%26_Heart_Rate_on_Omron_R6_20150222.jpg) |
+| `sanitas-wrist.jpg` | Jacek Halicki | [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/) | [2017 Sfigmomanometr elektroniczny.jpg](https://commons.wikimedia.org/wiki/File:2017_Sfigmomanometr_elektroniczny.jpg) |
+| `microlife.jpg` | Jacek Halicki | [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/) | [2020 Sfigmomanometr elektroniczny.jpg](https://commons.wikimedia.org/wiki/File:2020_Sfigmomanometr_elektroniczny.jpg) |
