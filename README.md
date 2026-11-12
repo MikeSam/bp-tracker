@@ -85,3 +85,9 @@ The `med55*` and `omron-m2-plus.jpg` photos are our own. The other photos come f
 | `omron-r6.jpg` | Amirhossein Ashrafzadeh | [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/) | [Blood Pressure & Heart Rate on Omron R6 20150222.jpg](https://commons.wikimedia.org/wiki/File:Blood_Pressure_%26_Heart_Rate_on_Omron_R6_20150222.jpg) |
 | `sanitas-wrist.jpg` | Jacek Halicki | [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/) | [2017 Sfigmomanometr elektroniczny.jpg](https://commons.wikimedia.org/wiki/File:2017_Sfigmomanometr_elektroniczny.jpg) |
 | `microlife.jpg` | Jacek Halicki | [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/) | [2020 Sfigmomanometr elektroniczny.jpg](https://commons.wikimedia.org/wiki/File:2020_Sfigmomanometr_elektroniczny.jpg) |
+
+## License and disclaimer
+
+Copyright © 2026 Mikhail Samarin. All rights reserved. This repository is published for viewing only, as a portfolio. No license is granted to use, copy, modify or publish the code or its assets. See [LICENSE](LICENSE). The third-party photos above keep their own licenses.
+
+**Not a medical device.** BP Tracker doesn't diagnose, treat or prevent any condition. It can misread a display, so always check values against your monitor and ask a doctor about your blood pressure. The software is provided "as is", without warranty of any kind, and the author isn't liable for any use of it.
