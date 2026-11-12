@@ -1,10 +1,10 @@
 # BPTracker
 
-[![BPTracker: snap your monitor, see your trend](docs/screenshots/header.jpg)](https://apps.apple.com/ru/app/bp-tracker-scan-your-monitor/id6826781390)
+[![BPTracker: snap your monitor, see your trend](docs/screenshots/header.jpg)](https://apps.apple.com/app/id6826781390)
 
 iOS app that logs blood pressure from a photo of a home monitor's display. It saves readings to Apple Health and shows charts, reminders and a PDF report.
 
-**[Download on the App Store](https://apps.apple.com/ru/app/bp-tracker-scan-your-monitor/id6826781390)**
+**[Download on the App Store](https://apps.apple.com/app/id6826781390)**
 
 <p>
   <img src="docs/screenshots/1-scan.png" width="19%" alt="Scan">
