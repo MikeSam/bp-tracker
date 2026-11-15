@@ -91,7 +91,7 @@ struct HistoryView: View {
             }
             Spacer()
             if let pulse = sample.pulse {
-                Text("\(pulse) bpm").font(.subheadline).monospacedDigit().foregroundStyle(.pink)
+                Text("\(pulse) bpm").font(.subheadline).monospacedDigit()
             }
             Text(sample.date, format: .dateTime.hour().minute())
                 .font(.subheadline).monospacedDigit().foregroundStyle(.secondary)
