@@ -147,31 +147,37 @@ enum Health {
     static func readings() -> AsyncThrowingStream<[BPSample], Error> {
         AsyncThrowingStream { continuation in
             let task = Task { @MainActor in
-                try await authorize()
-                let merged = Merged()
-                // HealthKit doesn't deliver live updates for correlation types, so watch the systolic samples
-                // (one per reading) and re-read all correlations whenever they change.
-                let sysQuery = HKAnchoredObjectQueryDescriptor(predicates: [.quantitySample(type: sysType)], anchor: nil)
-                let bpQuery = HKSampleQueryDescriptor(predicates: [.correlation(type: bpType)], sortDescriptors: [])
-                let hrQuery = HKAnchoredObjectQueryDescriptor(
-                    predicates: [.quantitySample(type: hrType, predicate: HKQuery.predicateForObjects(from: .default()))], anchor: nil)
-                try await withThrowingTaskGroup(of: Void.self) { group in
-                    group.addTask { @MainActor in
-                        for try await _ in sysQuery.results(for: store) {
-                            merged.bps = try await bpQuery.result(for: store).compactMap { BPSample($0) }
-                            continuation.yield(merged.readings)
-                        }
-                    }
-                    group.addTask { @MainActor in
-                        for try await update in hrQuery.results(for: store) {
-                            for deleted in update.deletedObjects { merged.pulses[deleted.uuid] = nil }
-                            for hr in update.addedSamples {
-                                merged.pulses[hr.uuid] = Merged.Pulse(date: hr.startDate, bpm: Int(hr.quantity.doubleValue(for: bpm).rounded()), readingID: readingID(hr))
+                do {
+                    try await authorize()
+                    let merged = Merged()
+                    // HealthKit doesn't deliver live updates for correlation types, so watch the systolic samples
+                    // (one per reading) and re-read all correlations whenever they change.
+                    let sysQuery = HKAnchoredObjectQueryDescriptor(predicates: [.quantitySample(type: sysType)], anchor: nil)
+                    let bpQuery = HKSampleQueryDescriptor(predicates: [.correlation(type: bpType)], sortDescriptors: [])
+                    let hrQuery = HKAnchoredObjectQueryDescriptor(
+                        predicates: [.quantitySample(type: hrType, predicate: HKQuery.predicateForObjects(from: .default()))], anchor: nil)
+                    try await withThrowingTaskGroup(of: Void.self) { group in
+                        group.addTask { @MainActor in
+                            for try await _ in sysQuery.results(for: store) {
+                                merged.bps = try await bpQuery.result(for: store).compactMap { BPSample($0) }
+                                merged.loaded.bps = true
+                                if merged.loaded.pulses { continuation.yield(merged.readings) }
                             }
-                            continuation.yield(merged.readings)
                         }
+                        group.addTask { @MainActor in
+                            for try await update in hrQuery.results(for: store) {
+                                for deleted in update.deletedObjects { merged.pulses[deleted.uuid] = nil }
+                                for hr in update.addedSamples {
+                                    merged.pulses[hr.uuid] = Merged.Pulse(date: hr.startDate, bpm: Int(hr.quantity.doubleValue(for: bpm).rounded()), readingID: readingID(hr))
+                                }
+                                merged.loaded.pulses = true
+                                if merged.loaded.bps { continuation.yield(merged.readings) }
+                            }
+                        }
+                        try await group.waitForAll()
                     }
-                    try await group.waitForAll()
+                } catch {
+                    continuation.finish(throwing: error)   // or the app waits forever on an empty list
                 }
             }
             continuation.onTermination = { _ in task.cancel() }
@@ -182,6 +188,8 @@ enum Health {
         struct Pulse { let date: Date; let bpm: Int; let readingID: String? }
         var bps: [BPSample] = []
         var pulses: [UUID: Pulse] = [:]   // this app's heart-rate samples
+        /// Nothing is shown until both queries have answered: a chart first drawn without pulses doesn't add them later.
+        var loaded = (bps: false, pulses: false)
 
         /// Each reading with its pulse. A heart rate linked by reading ID (or, before IDs, by the exact time when
         /// nothing else shares it) is the reading's own and is edited with it. Readings without a link only borrow

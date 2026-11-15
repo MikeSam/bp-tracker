@@ -2,6 +2,7 @@ import SwiftUI
 import PhotosUI
 
 struct ContentView: View {
+    @Environment(\.scenePhase) private var scenePhase
     @State private var readings: [BPSample] = []
     @State private var range = DateRange.month
     @State private var customStart = Calendar.current.date(byAdding: .day, value: -30, to: .now)!
@@ -64,7 +65,10 @@ struct ContentView: View {
                 Button("Reminders", systemImage: "bell") { showSettings = true }
             }
         }
-        .task {   // live: covers our saves, the Health app, and other apps
+        // Live: covers our saves, the Health app, and other apps. Restarted on each return to the foreground, since Health
+        // is unreadable while the phone is locked (e.g. launched in the background by a reminder) and a failed query stays failed.
+        .task(id: scenePhase == .active) {
+            guard scenePhase == .active else { return }
             #if DEBUG
             if let arg = UserDefaults.standard.string(forKey: "demo") { return await demo(arg) }
             #endif
