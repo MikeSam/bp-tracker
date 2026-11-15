@@ -215,8 +215,7 @@ struct ConfirmView: View {
         let date = reading.date
         do {
             if let original {
-                try await Health.replace(original, sys: values.sys, dia: values.dia, pulse: values.pulse, at: date)
-                onDone(String(localized: "Reading updated."))
+                try await Health.replace(original, sys: values.sys, dia: values.dia, pulse: values.pulse, at: date)   // the list shows the change; no alert
             } else {
                 try await Health.save(sys: values.sys, dia: values.dia, pulse: values.pulse, at: date)
                 onDone(String(localized: "Saved to Health."))

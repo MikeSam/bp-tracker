@@ -1592,34 +1592,6 @@
         }
       }
     },
-    "Reading updated." : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Messwert aktualisiert."
-          }
-        },
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Medición actualizada."
-          }
-        },
-        "ru" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Измерение обновлено."
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "读数已更新。"
-          }
-        }
-      }
-    },
     "Readings added by other apps can only be changed there." : {
       "localizations" : {
         "de" : {
