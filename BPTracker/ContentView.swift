@@ -138,6 +138,7 @@ struct ConfirmView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var error: String?
     @State private var saving = false
+    @FocusState private var focused: Field?
 
     init(reading: Reading, mode: Mode = .add, readOnly: Bool = false, onDone: @escaping (String) -> Void) {
         _reading = State(initialValue: reading)
@@ -168,9 +169,9 @@ struct ConfirmView: View {
         NavigationStack {
             Form {
                 let pairError = issues[.gap]?.isError == true   // systolic not above diastolic: both numbers are suspect
-                row("Systolic", $sys, issues[.sys], red: pairError)
-                row("Diastolic", $dia, issues[.dia], also: issues[.gap], red: pairError)
-                row("Pulse", $pulse, issues[.pulse])
+                row("Systolic", .sys, $sys, issues[.sys], red: pairError)
+                row("Diastolic", .dia, $dia, issues[.dia], also: issues[.gap], red: pairError)
+                row("Pulse", .pulse, $pulse, issues[.pulse])
                 if let original, original.pulseID == nil, original.pulse != nil {
                     Text("The pulse shown for this reading was saved separately and isn't changed here.")
                         .font(.footnote).foregroundStyle(.secondary)
@@ -192,13 +193,15 @@ struct ConfirmView: View {
     }
 
     /// A value row, with the field's issue (and the systolic/diastolic one, under diastolic) beneath it.
-    private func row(_ title: LocalizedStringKey, _ text: Binding<String>, _ issue: Issue?, also extra: Issue? = nil, red: Bool = false) -> some View {
+    private func row(_ title: LocalizedStringKey, _ field: Field, _ text: Binding<String>, _ issue: Issue?, also extra: Issue? = nil, red: Bool = false) -> some View {
         VStack(alignment: .leading, spacing: 4) {
             LabeledContent(title) {
                 TextField("—", text: text)
                     .keyboardType(.numberPad)
                     .multilineTextAlignment(.trailing)
-                    .foregroundStyle(red || issue?.isError == true ? .red : .primary)
+                    .focused($focused, equals: field)
+                    // Not while typing: iOS keeps a field's old color for new digits, so a fixed value stayed red. The message below is live.
+                    .foregroundStyle((red || issue?.isError == true) && focused != field ? .red : .primary)
             }
             ForEach([issue, extra].compactMap { $0 }.filter { $0.message != nil }, id: \.self) { issue in
                 Text(issue.message!)
