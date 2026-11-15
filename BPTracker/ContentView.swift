@@ -4,6 +4,7 @@ import PhotosUI
 struct ContentView: View {
     @Environment(\.scenePhase) private var scenePhase
     @State private var readings: [BPSample] = []
+    @State private var loaded = false   // until Health first answers, "No readings yet" would be a guess
     @State private var range = DateRange.month
     @State private var customStart = Calendar.current.date(byAdding: .day, value: -30, to: .now)!
     @State private var customEnd = Date.now
@@ -35,7 +36,11 @@ struct ContentView: View {
                         .font(.subheadline)
                     }
                 }
-                TrendView(readings: readings, window: window)
+                if loaded {
+                    TrendView(readings: readings, window: window)
+                } else {
+                    ProgressView("Loading readings…").frame(height: 240)
+                }
                 Spacer()
                 Text(status)
                     .multilineTextAlignment(.center)
@@ -72,7 +77,7 @@ struct ContentView: View {
             #if DEBUG
             if let arg = UserDefaults.standard.string(forKey: "demo") { return await demo(arg) }
             #endif
-            do { for try await all in Health.readings() { readings = all } } catch { status = error.localizedDescription }
+            do { for try await all in Health.readings() { readings = all; loaded = true } } catch { status = error.localizedDescription; loaded = true }
         }
         .sheet(isPresented: $showSettings) { SettingsView() }
         .sheet(isPresented: $showHistory) { HistoryView(readings: window.filter(readings), readOnly: demoMode) }
@@ -107,6 +112,7 @@ struct ContentView: View {
     /// Screenshot mode: mock readings instead of Health, then `-demo 1Y`, `report`, `reminders`, `history` or a photo path.
     private func demo(_ arg: String) async {
         readings = .mock
+        loaded = true
         demoMode = true
         if let preset = DateRange(rawValue: arg) { range = preset }
         else if arg == "history" { range = .week; showHistory = true }

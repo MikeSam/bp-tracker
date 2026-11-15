@@ -99,10 +99,10 @@ enum Health {
     private static func ownPulse(of bp: HKCorrelation) async throws -> HKSample? {
         let own = HKQuery.predicateForObjects(from: .default())
         let id = readingID(bp)
-        let match = id.map { HKQuery.predicateForObjects(withMetadataKey: readingIDKey, allowedValues: [$0]) }
-            ?? around(bp.startDate)
+        // Always bounded by time (a heart rate is saved at its reading's time): by source or ID alone Health takes seconds
+        let match = [own, around(bp.startDate)] + (id.map { [HKQuery.predicateForObjects(withMetadataKey: readingIDKey, allowedValues: [$0])] } ?? [])
         let hrQuery = HKSampleQueryDescriptor(
-            predicates: [.quantitySample(type: hrType, predicate: NSCompoundPredicate(andPredicateWithSubpredicates: [own, match]))], sortDescriptors: [])
+            predicates: [.quantitySample(type: hrType, predicate: NSCompoundPredicate(andPredicateWithSubpredicates: match))], sortDescriptors: [])
         let hrs = try await hrQuery.result(for: store).filter { $0.startDate == bp.startDate || id != nil }
         var unlinkedReadings = 0
         if id == nil {   // before IDs the link is by time alone, so it only holds if no other unlinked reading shares that time
@@ -151,30 +151,25 @@ enum Health {
                     try await authorize()
                     let merged = Merged()
                     // HealthKit doesn't deliver live updates for correlation types, so watch the systolic samples
-                    // (one per reading) and re-read all correlations whenever they change.
+                    // (one per reading) and re-read all correlations and their pulses whenever they change.
+                    // A pulse changed alone in the Health app shows on the next return to the app, which restarts this.
                     let sysQuery = HKAnchoredObjectQueryDescriptor(predicates: [.quantitySample(type: sysType)], anchor: nil)
                     let bpQuery = HKSampleQueryDescriptor(predicates: [.correlation(type: bpType)], sortDescriptors: [])
-                    let hrQuery = HKAnchoredObjectQueryDescriptor(
-                        predicates: [.quantitySample(type: hrType, predicate: HKQuery.predicateForObjects(from: .default()))], anchor: nil)
-                    try await withThrowingTaskGroup(of: Void.self) { group in
-                        group.addTask { @MainActor in
-                            for try await _ in sysQuery.results(for: store) {
-                                merged.bps = try await bpQuery.result(for: store).compactMap { BPSample($0) }
-                                merged.loaded.bps = true
-                                if merged.loaded.pulses { continuation.yield(merged.readings) }
-                            }
+                    for try await _ in sysQuery.results(for: store) {
+                        merged.bps = try await bpQuery.result(for: store).compactMap { BPSample($0) }
+                        var hrs: [HKQuantitySample] = []
+                        if let first = merged.bps.map(\.date).min() {
+                            // Date-bounded: by source alone Health scans a Watch's whole heart-rate history (~7 s vs 0.1 s)
+                            let since = HKQuery.predicateForSamples(withStart: first.addingTimeInterval(-60), end: nil)
+                            let own = HKQuery.predicateForObjects(from: .default())
+                            hrs = try await HKSampleQueryDescriptor(
+                                predicates: [.quantitySample(type: hrType, predicate: NSCompoundPredicate(andPredicateWithSubpredicates: [own, since]))],
+                                sortDescriptors: []).result(for: store)
                         }
-                        group.addTask { @MainActor in
-                            for try await update in hrQuery.results(for: store) {
-                                for deleted in update.deletedObjects { merged.pulses[deleted.uuid] = nil }
-                                for hr in update.addedSamples {
-                                    merged.pulses[hr.uuid] = Merged.Pulse(date: hr.startDate, bpm: Int(hr.quantity.doubleValue(for: bpm).rounded()), readingID: readingID(hr))
-                                }
-                                merged.loaded.pulses = true
-                                if merged.loaded.bps { continuation.yield(merged.readings) }
-                            }
-                        }
-                        try await group.waitForAll()
+                        merged.pulses = Dictionary(uniqueKeysWithValues: hrs.map {
+                            ($0.uuid, Merged.Pulse(date: $0.startDate, bpm: Int($0.quantity.doubleValue(for: bpm).rounded()), readingID: readingID($0)))
+                        })
+                        continuation.yield(merged.readings)
                     }
                 } catch {
                     continuation.finish(throwing: error)   // or the app waits forever on an empty list
@@ -188,8 +183,6 @@ enum Health {
         struct Pulse { let date: Date; let bpm: Int; let readingID: String? }
         var bps: [BPSample] = []
         var pulses: [UUID: Pulse] = [:]   // this app's heart-rate samples
-        /// Nothing is shown until both queries have answered: a chart first drawn without pulses doesn't add them later.
-        var loaded = (bps: false, pulses: false)
 
         /// Each reading with its pulse. A heart rate linked by reading ID (or, before IDs, by the exact time when
         /// nothing else shares it) is the reading's own and is edited with it. Readings without a link only borrow
